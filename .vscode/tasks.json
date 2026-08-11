@@ -1,0 +1,16 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build resources",
+            "type": "shell",
+            "command": "pyside6-rcc",
+            "args": ["${workspaceFolder}/assets/res.qrc", "-o", "${workspaceFolder}/assets/rc_res.py"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
