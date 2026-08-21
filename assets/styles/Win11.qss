@@ -1,0 +1,130 @@
+*{ font-size: 12pt; Font-family: Giga Sans; } 
+
+
+/* NoFrame = 0, Box = 0x0001, Panel = 0x0002, WinPanel = 0x0003, StyledPanel = 0x0006, PopupPanel = 0x0007, MenuBarPanel = 0x0008, ToolBarPanel = 0x0009, LineEditPanel = 0x000a, TabWidgetPanel = 0x000b, GroupBoxPanel = 0x000c, MShape = 0x000f */
+/* QFrame[frameShape="6"] { */
+	/* background-color: rgba(0, 0, 0, 16); */
+	/* border-radius: 10px; */
+	/* border: 1px solid rgba(0, 0, 0, 32); */
+/* } */
+
+/* QWidget > QFrame { */
+	/* border: 1px solid rgba(0, 0, 0, 32); */
+/* } */
+
+QTabWidget::pane {
+    background: transparent;
+    border: 0px solid gray;
+}
+
+QTabBar::tab {
+    background: transparent;
+}
+
+QTabBar::tab::selected {
+    color: #0078d7;
+}
+
+QWidget > QLabel {  }
+
+QWidget > QWidget {  }
+
+QWidget > *:focus { border: 2px solid #31D4A9; border-radius:4px; }
+
+QScrollArea { background: transparent; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+QScrollArea > QWidget > QScrollBar { background: palette(1); }
+
+QTableWidget {
+	/* Font-family: Consolas; */
+	background-color: rgba(0, 0, 0, 0); 
+	border-radius: 6px; 
+	gridline-color: 1px solid rgba(0, 0, 0, 32);
+	border: 1px solid rgba(0, 0, 0, 0);
+} 
+
+QTableView {
+	/* Font-family: Consolas; */
+	font-size: 12pt; 
+}
+
+QMenuBar {
+	Font-family: Giga Sans;
+	font-weight: bold;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	border-bottom: 0px solid grey;
+}
+
+#SideBarPanel {
+	background-color: rgb(192, 192, 192);
+	border-radius: 10px;
+	border: 2px solid rgb(168, 168, 168);
+}
+
+/*Меню программы и самоуничтожения*/
+#menuSelfdestruct { 
+	color: red;
+	font-weight: bold;	
+}
+
+#scrollAreaWidgetContents {
+	background-color: rgba(0, 0, 0, 4);
+}
+
+QLabel[textSize="xs"] { font-size: 8pt; }
+QLabel[textSize="sm"] { font-size: 10pt; }
+QLabel[textSize="md"] { font-size: 12pt; }
+QLabel[textSize="lg"] { font-size: 16pt; font-weight: bold; }
+QLabel[textSize="xl"] { font-size: 18pt; font-weight: bold; }
+
+QLabel[textColor="default"] { color: black; }
+QLabel[textColor="accept"] 	{ color: green; }
+QLabel[textColor="error"]   { color: red; }
+QLabel[textColor="warning"] { color: orange; }
+
+QLabel[textRole="secondary"] { color: gray; }
+
+
+QPushButton[buttonRole = "navigationButton"] {
+	text-align: left;
+	padding: 5px;
+	border: none;
+	border-radius: 3px;
+	background-color: #f0f0f0;
+}
+QPushButton:hover[buttonRole = "navigationButton"] {
+	background-color: #e0e0e0;
+}
+QPushButton[active="true"][buttonRole = "navigationButton"] {
+	background-color: #0078d7;
+	color: white;
+}
+
+/* Індикатор стану сервера */
+#ServerIndicatorOnline {
+    color: #00cc00;
+}
+
+#ServerIndicatorOffline {
+    color: #ff3333;
+}
+
+
+ServerStatusWidget QLabel#ServerIndicatorOnline {
+    color: #00cc00;
+}
+
+ServerStatusWidget QLabel#ServerIndicatorOffline {
+    color: #ff3333;
+}
+
+#UserInfoWidget {
+	background-color: #31D4A9;
+	border-radius: 20px; 
+}
+
+#LeftMenuFrameIndicator {
+	background-color: #31D4A9; border-radius: 2px;
+
+}
