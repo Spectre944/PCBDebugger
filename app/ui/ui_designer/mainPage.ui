@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>852</width>
+    <height>611</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget"/>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>852</width>
+     <height>33</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menu">
+    <property name="title">
+     <string>Файл</string>
+    </property>
+    <addaction name="action_openDigagnostic"/>
+    <addaction name="action_saveDiagnostic"/>
+   </widget>
+   <widget class="QMenu" name="menu_view">
+    <property name="title">
+     <string>Вигляд</string>
+    </property>
+    <addaction name="actionStay_On_Top"/>
+    <addaction name="separator"/>
+    <addaction name="action_mainPage"/>
+    <addaction name="action_settingsPage"/>
+   </widget>
+   <widget class="QMenu" name="menuKiCAD">
+    <property name="title">
+     <string>KiCAD</string>
+    </property>
+    <addaction name="action_connectKiCAD"/>
+   </widget>
+   <widget class="QMenu" name="menu_debug">
+    <property name="title">
+     <string>Дебаг</string>
+    </property>
+    <addaction name="action_debug_start_pause"/>
+    <addaction name="action_debug_nextStep"/>
+    <addaction name="action_debug_stop"/>
+    <addaction name="action_debug_restart"/>
+   </widget>
+   <addaction name="menu"/>
+   <addaction name="menu_view"/>
+   <addaction name="menu_debug"/>
+   <addaction name="menuKiCAD"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="action_openDigagnostic">
+   <property name="text">
+    <string>Відкрити</string>
+   </property>
+  </action>
+  <action name="actionStay_On_Top">
+   <property name="text">
+    <string>Stay On Top</string>
+   </property>
+   <property name="shortcut">
+    <string>F11</string>
+   </property>
+  </action>
+  <action name="action_saveDiagnostic">
+   <property name="text">
+    <string>Зберегти</string>
+   </property>
+  </action>
+  <action name="action_connectKiCAD">
+   <property name="text">
+    <string>Підключитись</string>
+   </property>
+  </action>
+  <action name="action_debug_start_pause">
+   <property name="text">
+    <string>Запустити</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
+   </property>
+  </action>
+  <action name="action_2">
+   <property name="text">
+    <string>Пауза</string>
+   </property>
+  </action>
+  <action name="action_3">
+   <property name="text">
+    <string>Зупинити</string>
+   </property>
+  </action>
+  <action name="action_debug_nextStep">
+   <property name="text">
+    <string>Наступний крок</string>
+   </property>
+   <property name="shortcut">
+    <string>F10</string>
+   </property>
+  </action>
+  <action name="action_debug_stop">
+   <property name="text">
+    <string>Зупинити</string>
+   </property>
+   <property name="shortcut">
+    <string>Shift+F5</string>
+   </property>
+  </action>
+  <action name="action_debug_restart">
+   <property name="text">
+    <string>Рестарт</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+F5</string>
+   </property>
+  </action>
+  <action name="action_mainPage">
+   <property name="text">
+    <string>Головна сторінка</string>
+   </property>
+  </action>
+  <action name="action_settingsPage">
+   <property name="text">
+    <string>Налаштування</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

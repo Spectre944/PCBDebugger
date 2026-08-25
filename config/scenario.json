@@ -1,0 +1,158 @@
+{
+  "name": "Алгоритм перевірки плати запиту",
+  "start": "a1f3c8d2",
+  "steps": [
+    {
+      "general": {
+        "id": "a1f3c8d2",
+        "title": "1. Подати живлення",
+        "description": "Подати на плату живлення 8В в ручному режимі тумблером. Підтвердіть, коли готово."
+      },
+      "testing": { "mode": "manual" },
+      "options": {
+        "pass": { "next": "9e47b1f0", "log": "Живлення подано" },
+        "fail": { "next": "a1f3c8d2", "pause": true, "log": "Живлення відсутнє" }
+      },
+      "nets": []
+    },
+    {
+      "general": {
+        "id": "9e47b1f0",
+        "title": "2. Перевірка ліній програмування та живлення 3.3В"
+      },
+      "testing": { "mode": "auto", "kind": "run_programmer" },
+      "options": {
+        "pass": { "next": "3b8f1e6c" },
+        "fail": {
+          "next": "9e47b1f0",
+          "pause": true,
+          "log": "Помилка програмування: живлення 3.3В (D1_P12) або лінії SWCLK/SWDIO (D1_P109-X1_P9, D1_P105-X1_P7)",
+          "hint": "Перевірте тестером лінії програмування та рівень 3.3В, потім повторіть крок."
+        }
+      },
+      "nets": ["+3.3VD", "SWCLK", "SWDIO"]
+    },
+    {
+      "general": {
+        "id": "3b8f1e6c",
+        "title": "3.1 Перевірка вихідної лінії інтерфейсу USB"
+      },
+      "testing": { "mode": "auto", "kind": "wait_signal" },
+      "options": {
+        "pass": { "next": "56d70bd4" },
+        "fail": {
+          "next": "3b8f1e6c",
+          "pause": true,
+          "log": "Сигнал не надійшов від USB за 2с — проблема з лінією D1_P101-X2_P4"
+        }
+      },
+      "nets": ["USART1_TX"]
+    },
+    {
+      "general": {
+        "id": "56d70bd4",
+        "title": "3.2 Перевірка вихідної лінії інтерфейсу Bluetooth"
+      },
+      "testing": { "mode": "auto", "kind": "wait_signal" },
+      "options": {
+        "pass": { "next": "c4a29f71" },
+        "fail": {
+          "next": "56d70bd4",
+          "pause": true,
+          "log": "Сигнал не надійшов від Bluetooth за 2с — проблема з лінією D1_P96-X2_P6"
+        }
+      },
+      "nets": ["USART6_TX"]
+    },
+    {
+      "general": {
+        "id": "c4a29f71",
+        "title": "4.1 Перевірка вхідної лінії інтерфейсу USB"
+      },
+      "testing": { "mode": "auto", "kind": "send_and_wait" },
+      "options": {
+        "pass": { "next": "f209a6c3" },
+        "fail": {
+          "next": "8d1b45e0",
+          "pause": true,
+          "log": "Немає відповіді READY1 — проблема з лінією D1_P102-X2_P2"
+        }
+      },
+      "nets": ["USB_RXD"]
+    },
+    {
+      "general": {
+        "id": "8d1b45e0",
+        "title": "4.3 Ручна перевірка виділених ліній (тестер, осцилограф)",
+        "description": "Перевірте виділені лінії тестером/осцилографом, усуньте несправність."
+      },
+      "testing": { "mode": "manual" },
+      "options": {
+        "pass": { "next": "c4a29f71" },
+        "fail": { "next": "8d1b45e0", "pause": true }
+      },
+      "nets": ["USB_RXD", "BT_RXD"]
+    },
+    {
+      "general": {
+        "id": "f209a6c3",
+        "title": "4.2 Перевірка вхідної лінії інтерфейсу Bluetooth"
+      },
+      "testing": { "mode": "auto", "kind": "send_and_wait" },
+      "options": {
+        "pass": { "next": "62e7d1b8" },
+        "fail": {
+          "next": "8d1b45e0",
+          "pause": true,
+          "log": "Немає відповіді READY2 — проблема з лінією D1_P102-X2_P5"
+        }
+      },
+      "nets": ["BT_RXD"]
+    },
+    {
+      "general": {
+        "id": "62e7d1b8",
+        "title": "5. Перевірка роботи генератора"
+      },
+      "testing": { "mode": "auto", "kind": "send_and_wait" },
+      "options": {
+        "pass": { "next": "1a5c9f34" },
+        "fail": {
+          "next": "62e7d1b8",
+          "pause": true,
+          "log": "Немає відповіді від плати — проблема генератора: лінія D1_P23-D2_P3 та мікросхема D2"
+        }
+      },
+      "nets": ["OSC_HSE"]
+    },
+    {
+      "general": {
+        "id": "1a5c9f34",
+        "title": "6. Перевірка ліній індикації та керування",
+        "notes": "Крок відновлено за неповним чернеткою алгоритму (документ обривається на цьому пункті) — уточніть в автора алгоритму після перевірки перших п'яти кроків."
+      },
+      "testing": { "mode": "auto", "kind": "send_and_wait" },
+      "options": {
+        "pass": { "next": "00000000" },
+        "fail": {
+          "next": "1a5c9f34",
+          "pause": true,
+          "log": "Не отримано відповідь формату $PORT G ... від базового процесора"
+        }
+      },
+      "nets": ["OLED_CD"]
+    },
+    {
+      "general": {
+        "id": "00000000",
+        "title": "Перевірка завершена"
+      },
+      "testing": { "mode": "info" },
+      "options": {
+        "pass": { "next": null },
+        "fail": { "next": null }
+      },
+      "nets": []
+    }
+  ]
+}
