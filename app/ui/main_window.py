@@ -7,6 +7,8 @@ from app.ui.pages.main_window import Ui_MainWindow
 from app.ui.pages.settings_page import Ui_settingsPage
 
 from backend.kicad_api import KiCAD_API
+from backend.session import DiagnosticSession
+from backend.runner import ScenarioRunner
 from backend.models.list_model import TaskListModel, TaskStatus, STATUS_COLORS, STATUS_LABELS, STATUS_ROLE
 
 from PySide6.QtWidgets import (
@@ -17,7 +19,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import (
     QPixmap, QColor, QUndoStack, QShortcut, QKeySequence, QStandardItemModel, QStandardItem, QColor, QBrush
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QModelIndex
+from PySide6.QtCore import Qt, QTimer, Signal, QModelIndex, QDateTime, QStandardPaths
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self):
@@ -28,7 +30,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         # Дополнительные настройки окна
         self.setWindowTitle("PCB Debugger")
-        self.resize(720, 600)
+        self.resize(1280, 460)
         self.setStyleSheet("QMainWindow { background:#0e1120; }")
 
         self.kicad = KiCAD_API()
@@ -50,9 +52,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Model
         self.model = TaskListModel()
-        self.model.load_from_file("config\scenario.json")
+        self.model.logRequested.connect(self.append_log)
+        self.model.load_from_file("config\\scenario.json")
 
-        self.ui_main_page.treeViewTaskList
+        # Процесс автодиагностики
+        self.runner = ScenarioRunner(self.model, self.kicad)
+
+        # Сохранения и загрузка сессии диагностики
+        self.session = DiagnosticSession(self.model)
+        self.model.logRequested.connect(self.session.append_log)    
+
+        # Подключение обработки Serial портов
+        # runner.register_auto_handler("wait_signal", self.serial.handle_wait_signal)
+        # runner.register_auto_handler("send_and_wait", self.serial.handle_send_and_wait)
 
         self.ui_main_page.treeViewTaskList.setModel(self.model)
         self.ui_main_page.treeViewTaskList.setColumnWidth(0, 350)
@@ -83,17 +95,34 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def on_click(self, index: QModelIndex):
         if index.column() != 0:
             index = index.siblingAtColumn(0)
+        self.update_info(index)
         nets = self.model.get_nets(index)
-        for net_name in nets:
-            self.kicad.select_net(net_name, zoomToFit=False)
+        self.kicad.select_net(*nets, zoomToFit=False)
 
     # --- Двойной клик: выделить сети + zoomToFit ---
     def on_double_click(self, index: QModelIndex):
         if index.column() != 0:
             index = index.siblingAtColumn(0)
+        self.update_info(index)
         nets = self.model.get_nets(index)
-        for net_name in nets:
-            self.kicad.select_net(net_name, zoomToFit=True)
+        self.kicad.select_net(*nets, zoomToFit=True)
+
+    # --- Обновление info-панели по выбранному шагу ---
+    def update_info(self, index: QModelIndex):
+        description = self.model.get_description(index)
+        hint = self.model.get_hint(index)
+        nets = self.model.get_nets(index)
+
+        self.ui_main_page.label_description.setText(description)
+        self.ui_main_page.label_hint.setText(hint)
+        self.ui_main_page.label_objSelect.setText(
+            "Обрано nets: " + (", ".join(nets) if nets else "-")
+        )
+
+    # --- Добавление записи в лог с таймштампом ---
+    def append_log(self, text: str):
+        timestamp = QDateTime.currentDateTime().toString("HH:mm:ss")
+        self.ui_main_page.textEditLog.append(f"[{timestamp}] {text}")
 
     # --- ПКМ: контекстное меню ---
     def on_context_menu(self, pos):
@@ -116,24 +145,58 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         if action == act_passed:
             self.model.set_status(index, TaskStatus.PASSED)
+            self.update_info(index)
         elif action == act_failed:
             self.model.set_status(index, TaskStatus.FAILED)
+            self.update_info(index)
         elif action == act_not_tested:
             self.model.set_status(index, TaskStatus.NOT_TESTED)
+            self.update_info(index)
         elif action == act_highlight_nets:
             for net_name in self.model.get_nets(index):
                 self.kicad.select_net(net_name, zoomToFit=False)
         elif action == act_highlight_pins:
-            for net_name in self.model.get_nets(index):
-                self.kicad.select_net_pins(net_name, zoomToFit=False)
+            nets = self.model.get_nets(index)
+            self.kicad.select_net_pins(*nets, zoomToFit=False)
     
     # Слоты для действий меню
     def open_diagnostic(self):
-        print("Open diagnostic")
+        # Получаем путь к домашней папке или последней использованной
+        home_dir = QStandardPaths.writableLocation(QStandardPaths.HomeLocation)
+        
+        # Открываем диалог выбора файла
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,                      # родительское окно
+            "Відкрити діагностичний файл",  # заголовок
+            home_dir,                  # начальная директория
+            "JSON files (*.json);;All files (*.*)"  # фильтр расширений
+        )
+        
+        if file_path:  # если файл выбран (не нажали "Отмена")
+            self.session.load(file_path)
+            QMessageBox.information(self, "Успіх", f"Файл завантажений: {file_path}")
     
     def save_diagnostic(self):
-        print("Save diagnostic")
-    
+        # Предлагаем имя файла по умолчанию
+        default_name = "diagnostic.json"
+        home_dir = QStandardPaths.writableLocation(QStandardPaths.HomeLocation)
+        
+        # Открываем диалог сохранения
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Зберегти діагностичний файл",
+            f"{home_dir}/{default_name}",  # полный путь с именем файла
+            "JSON files (*.json);;All files (*.*)"
+        )
+        
+        if file_path:
+            # Добавляем расширение .json, если пользователь его не указал
+            if not file_path.endswith('.json'):
+                file_path += '.json'
+            
+            self.session.save(file_path)
+            QMessageBox.information(self, "Успіх", f"Файл збережено: {file_path}")
+        
     def toggle_stay_on_top(self):
         if self.windowFlags() & Qt.WindowStaysOnTopHint:
             self.setWindowFlags(self.windowFlags() & ~Qt.WindowStaysOnTopHint)
@@ -143,19 +206,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     
     def connect_kicad(self):
         print("Connect to KiCAD")
-        self.kicad.select_net("LDAC_REF", True)
+        # self.kicad.select_footprint_pins("10VT1", "10D1")
 
-    
     def debug_start_pause(self):
-        print("Debug start/pause")
-        # self.kicad.select_net("ZAH_VP1")
-        self.kicad.select_net_pins("CLK_MOD")
+        self.runner.start("9e47b1f0")
     
     def debug_next_step(self):
         print("Debug next step")
     
     def debug_stop(self):
-        print("Debug stop")
+        self.runner.stop()
     
     def debug_restart(self):
         print("Debug restart")

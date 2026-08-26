@@ -1,7 +1,7 @@
 import sys
 import ctypes
 
-# import assets.rc_res
+import assets.rc_res
 
 from PySide6.QtCore import QTranslator
 from PySide6.QtGui import QIcon

@@ -2,7 +2,7 @@ from kipy import KiCad
 
 kicad = KiCad()
 board = kicad.get_board()
-
+# '''
 net_name = "ZAH_VP1"
 nets = board.get_nets()
 target_net = next((n for n in nets if n.name == net_name), None)
@@ -20,7 +20,7 @@ else:
     print(f"Выделено и приближено {len(items)} объектов сети '{net_name}'")
 
 '''
-ref_name = "X1"
+ref_name = "10VT1"
 pin_number = "1"
 
 footprints = board.get_footprints()
@@ -37,4 +37,4 @@ else:
         board.add_to_selection([target_pad])
         kicad.run_action("common.Control.zoomFitSelection")
         print(f"Выделен пин {ref_name}.{pin_number}")
-'''
+# '''
