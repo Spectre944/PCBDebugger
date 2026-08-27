@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'untitledmutBiua.ui'
+## Form generated from reading UI file 'mainPageuEVYcW.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.11.1
 ##
@@ -120,6 +120,6 @@ class Ui_MainWindow(object):
         self.menu.setTitle(QCoreApplication.translate("MainWindow", u"\u0424\u0430\u0439\u043b", None))
         self.menu_view.setTitle(QCoreApplication.translate("MainWindow", u"\u0412\u0438\u0433\u043b\u044f\u0434", None))
         self.menuKiCAD.setTitle(QCoreApplication.translate("MainWindow", u"KiCAD", None))
-        self.menu_debug.setTitle(QCoreApplication.translate("MainWindow", u"\u0414\u0435\u0431\u0430\u0433", None))
+        self.menu_debug.setTitle(QCoreApplication.translate("MainWindow", u"\u0412\u0456\u0434\u043b\u0430\u0434\u043a\u0430", None))
     # retranslateUi
 

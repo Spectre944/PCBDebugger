@@ -10,6 +10,7 @@ from backend.kicad_api import KiCAD_API
 from backend.session import DiagnosticSession
 from backend.runner import ScenarioRunner
 from backend.serial_manager import SerialManager
+from backend.serial_step_handler import SerialStepHandler
 
 from backend.models.list_model import TaskListModel, TaskStatus, STATUS_COLORS, STATUS_LABELS, STATUS_ROLE
 
@@ -68,9 +69,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.session = DiagnosticSession(self.model)
         self.model.logRequested.connect(self.session.append_log)    
 
-        # Подключение обработки Serial портов
-        self.runner.register_auto_handler("wait_signal", self.serial.wait_signal)
-        self.runner.register_auto_handler("send_and_wait", self.serial.send_and_wait)
+        # Місток serial <-> runner: узгоджує запит/відповідь для auto-кроків
+        # (замінює стару пряму реєстрацію self.serial.wait_signal/send_and_wait,
+        # яка не працювала — runner викликає handler(index), а serial чекає
+        # (port_key, match_fn, timeout))
+        self.serial_step_handler = SerialStepHandler(self.runner, self.serial, self.model)
+
+        # Текстовий статус дебага (поки що просто дублюємо в той самий лог)
+        self.runner.debugStatus.connect(self.append_log)
+        self.runner.debugStatus.connect(self.update_debug_status)
 
         self.ui_main_page.treeViewTaskList.setModel(self.model)
         self.ui_main_page.treeViewTaskList.setColumnWidth(0, 350)
@@ -130,6 +137,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         timestamp = QDateTime.currentDateTime().toString("HH:mm:ss")
         self.ui_main_page.textEditLog.append(f"[{timestamp}] {text}")
 
+    def update_debug_status(self, text: str):
+        self.ui_main_page.label_debug.setText(text)
+
+    def update_debug_hint(self, text: str):
+            self.ui_main_page.label_debug_hint.setText(text)
+
     # --- ПКМ: контекстное меню ---
     def on_context_menu(self, pos):
         index = self.ui_main_page.treeViewTaskList.indexAt(pos)
@@ -146,6 +159,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         act_highlight_nets = menu.addAction("Підсвітити nets")
         act_highlight_pins = menu.addAction("Підсвітити контакти")
+
+        menu.addSeparator()
+        act_start_here = menu.addAction("Почати перевірку звідси")
 
         action = menu.exec(self.ui_main_page.treeViewTaskList.viewport().mapToGlobal(pos))
 
@@ -164,6 +180,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         elif action == act_highlight_pins:
             nets = self.model.get_nets(index)
             self.kicad.select_net_pins(*nets, zoomToFit=False)
+        elif action == act_start_here:
+            # "Run to here" — стартуємо/перестрибуємо дебаг на обраний крок,
+            # незалежно від того, де він зараз стоїть.
+            self.runner.start(self.model.get_id(index))
     
     # Слоты для действий меню
     def open_diagnostic(self):
@@ -215,7 +235,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # self.kicad.select_footprint_pins("10VT1", "10D1")
 
     def debug_start_pause(self):
-        self.runner.start("9e47b1f0")
+        # Одна кнопка: Start (з початку), Resume (після паузи/fail-брейкпоінта)
+        # або Pause (якщо зараз йде автопрогон) — вирішує сам раннер по стану.
+        self.runner.toggle_start_pause()
     
     def debug_next_step(self):
         self.runner.next_step()
@@ -224,4 +246,4 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.runner.stop()
     
     def debug_restart(self):
-        print("Debug restart")
+        self.runner.restart()

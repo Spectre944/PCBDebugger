@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'mainWindowkjTapD.ui'
+## Form generated from reading UI file 'mainWindowQGhsTJ.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.10.2
+## Created by: Qt User Interface Compiler version 6.11.1
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -55,19 +55,10 @@ class Ui_mainPage(object):
 
         self.gridLayout_2.addWidget(self.label_2, 1, 0, 1, 1)
 
-        self.label_hint = QLabel(self.frameInfo)
-        self.label_hint.setObjectName(u"label_hint")
-        self.label_hint.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignTop)
-        self.label_hint.setWordWrap(True)
+        self.label_3 = QLabel(self.frameInfo)
+        self.label_3.setObjectName(u"label_3")
 
-        self.gridLayout_2.addWidget(self.label_hint, 1, 1, 1, 1)
-
-        self.label_description = QLabel(self.frameInfo)
-        self.label_description.setObjectName(u"label_description")
-        self.label_description.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignTop)
-        self.label_description.setWordWrap(True)
-
-        self.gridLayout_2.addWidget(self.label_description, 0, 1, 1, 1)
+        self.gridLayout_2.addWidget(self.label_3, 3, 0, 1, 1)
 
         self.label = QLabel(self.frameInfo)
         self.label.setObjectName(u"label")
@@ -79,13 +70,58 @@ class Ui_mainPage(object):
 
         self.verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
-        self.gridLayout_2.addItem(self.verticalSpacer, 2, 0, 1, 1)
+        self.gridLayout_2.addItem(self.verticalSpacer, 6, 0, 1, 1)
 
         self.label_objSelect = QLabel(self.frameInfo)
         self.label_objSelect.setObjectName(u"label_objSelect")
         self.label_objSelect.setWordWrap(True)
 
-        self.gridLayout_2.addWidget(self.label_objSelect, 3, 0, 1, 2)
+        self.gridLayout_2.addWidget(self.label_objSelect, 7, 0, 1, 2)
+
+        self.label_debug = QLabel(self.frameInfo)
+        self.label_debug.setObjectName(u"label_debug")
+        self.label_debug.setWordWrap(True)
+
+        self.gridLayout_2.addWidget(self.label_debug, 3, 1, 1, 1)
+
+        self.label_4 = QLabel(self.frameInfo)
+        self.label_4.setObjectName(u"label_4")
+
+        self.gridLayout_2.addWidget(self.label_4, 4, 0, 1, 1)
+
+        self.label_hint = QLabel(self.frameInfo)
+        self.label_hint.setObjectName(u"label_hint")
+        self.label_hint.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignTop)
+        self.label_hint.setWordWrap(True)
+
+        self.gridLayout_2.addWidget(self.label_hint, 1, 1, 1, 1)
+
+        self.line = QFrame(self.frameInfo)
+        self.line.setObjectName(u"line")
+        self.line.setFrameShape(QFrame.Shape.HLine)
+        self.line.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.gridLayout_2.addWidget(self.line, 2, 0, 1, 2)
+
+        self.label_description = QLabel(self.frameInfo)
+        self.label_description.setObjectName(u"label_description")
+        self.label_description.setAlignment(Qt.AlignmentFlag.AlignLeading|Qt.AlignmentFlag.AlignLeft|Qt.AlignmentFlag.AlignTop)
+        self.label_description.setWordWrap(True)
+
+        self.gridLayout_2.addWidget(self.label_description, 0, 1, 1, 1)
+
+        self.label_debug_hint = QLabel(self.frameInfo)
+        self.label_debug_hint.setObjectName(u"label_debug_hint")
+        self.label_debug_hint.setWordWrap(True)
+
+        self.gridLayout_2.addWidget(self.label_debug_hint, 4, 1, 1, 1)
+
+        self.line_2 = QFrame(self.frameInfo)
+        self.line_2.setObjectName(u"line_2")
+        self.line_2.setFrameShape(QFrame.Shape.HLine)
+        self.line_2.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.gridLayout_2.addWidget(self.line_2, 5, 0, 1, 2)
 
 
         self.verticalLayout.addLayout(self.gridLayout_2)
@@ -108,9 +144,13 @@ class Ui_mainPage(object):
         mainPage.setWindowTitle(QCoreApplication.translate("mainPage", u"MainPage", None))
         self.textEditLog.setPlaceholderText(QCoreApplication.translate("mainPage", u"\u041b\u043e\u0433\u0443\u0432\u0430\u043d\u043d\u044f \u043f\u0435\u0440\u0435\u0432\u0456\u0440\u043a\u0438", None))
         self.label_2.setText(QCoreApplication.translate("mainPage", u"\u041f\u0456\u0434\u043a\u0430\u0437\u043a\u0430:", None))
+        self.label_3.setText(QCoreApplication.translate("mainPage", u"\u0412\u0456\u0434\u043b\u0430\u0434\u043a\u0430:", None))
+        self.label.setText(QCoreApplication.translate("mainPage", u"\u041e\u043f\u0438\u0441 \u043f\u0435\u0440\u0435\u0432\u0456\u0440\u043a\u0438: ", None))
+        self.label_objSelect.setText(QCoreApplication.translate("mainPage", u"\u041e\u0431\u0440\u0430\u043d\u043e nets:", None))
+        self.label_debug.setText(QCoreApplication.translate("mainPage", u"-", None))
+        self.label_4.setText(QCoreApplication.translate("mainPage", u"\u041f\u0456\u0434\u043a\u0430\u0437\u043a\u0430:", None))
         self.label_hint.setText(QCoreApplication.translate("mainPage", u"-", None))
         self.label_description.setText(QCoreApplication.translate("mainPage", u"-", None))
-        self.label.setText(QCoreApplication.translate("mainPage", u"\u041e\u043f\u0438\u0441: ", None))
-        self.label_objSelect.setText(QCoreApplication.translate("mainPage", u"\u041e\u0431\u0440\u0430\u043d\u043e nets:", None))
+        self.label_debug_hint.setText(QCoreApplication.translate("mainPage", u"-", None))
     # retranslateUi
 

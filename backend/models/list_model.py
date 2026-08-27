@@ -122,6 +122,10 @@ class TaskListModel(QStandardItemModel):
     def get_id(self, index: QModelIndex) -> str:
         return self.item(index.row(), 0).data(ID_ROLE)
 
+    def get_title(self, index: QModelIndex) -> str:
+        """Людяне ім'я кроку (те, що показано в дереві) — для логів замість id."""
+        return self.item(index.row(), 0).text()
+
     def get_nets(self, index: QModelIndex) -> list:
         return self.item(index.row(), 0).data(NETS_ROLE) or []
 
@@ -223,3 +227,9 @@ class TaskListModel(QStandardItemModel):
 
     def clear_current(self):
         self.set_current(None)
+
+    def reset_statuses(self):
+        """Скидає статуси всіх кроків до NOT_TESTED — для Restart дебагу."""
+        for row in range(self.rowCount()):
+            index = self.index(row, 0)
+            self.set_status(index, TaskStatus.NOT_TESTED)
