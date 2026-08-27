@@ -37,7 +37,7 @@
         "id": "3b8f1e6c",
         "title": "3.1 Перевірка вихідної лінії інтерфейсу USB"
       },
-      "testing": { "mode": "auto", "kind": "wait_signal" },
+      "testing": { "mode": "auto", "kind": "wait_signal", "expect" : "$RS TXD READY1*" },
       "options": {
         "pass": { "next": "56d70bd4" },
         "fail": {
@@ -53,7 +53,7 @@
         "id": "56d70bd4",
         "title": "3.2 Перевірка вихідної лінії інтерфейсу Bluetooth"
       },
-      "testing": { "mode": "auto", "kind": "wait_signal" },
+      "testing": { "mode": "auto", "kind": "wait_signal", "expect" : "$RS TXD READY2*" },
       "options": {
         "pass": { "next": "c4a29f71" },
         "fail": {
@@ -69,7 +69,7 @@
         "id": "c4a29f71",
         "title": "4.1 Перевірка вхідної лінії інтерфейсу USB"
       },
-      "testing": { "mode": "auto", "kind": "send_and_wait" },
+      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST1", "expect" : "$RS RXD READY1*" },
       "options": {
         "pass": { "next": "f209a6c3" },
         "fail": {
@@ -85,7 +85,7 @@
         "id": "f209a6c3",
         "title": "4.2 Перевірка вхідної лінії інтерфейсу Bluetooth"
       },
-      "testing": { "mode": "auto", "kind": "send_and_wait" },
+      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST2*", "expect" : "$RS RXD READY2"  },
       "options": {
         "pass": { "next": "62e7d1b8" },
         "fail": {
@@ -114,7 +114,7 @@
         "id": "62e7d1b8",
         "title": "5. Перевірка роботи генератора"
       },
-      "testing": { "mode": "auto", "kind": "send_and_wait" },
+      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$GEN EN *", "expect" : "-" },
       "options": {
         "pass": { "next": "1a5c9f34" },
         "fail": {

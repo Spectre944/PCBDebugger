@@ -9,6 +9,8 @@ from app.ui.pages.settings_page import Ui_settingsPage
 from backend.kicad_api import KiCAD_API
 from backend.session import DiagnosticSession
 from backend.runner import ScenarioRunner
+from backend.serial_manager import SerialManager
+
 from backend.models.list_model import TaskListModel, TaskStatus, STATUS_COLORS, STATUS_LABELS, STATUS_ROLE
 
 from PySide6.QtWidgets import (
@@ -57,14 +59,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Процесс автодиагностики
         self.runner = ScenarioRunner(self.model, self.kicad)
+        self.serial = SerialManager()
+
+        self.serial.add_port("RS","COM20", baud_rate=19200)
+        self.serial.add_port("BT","COM21", baud_rate=19200)
 
         # Сохранения и загрузка сессии диагностики
         self.session = DiagnosticSession(self.model)
         self.model.logRequested.connect(self.session.append_log)    
 
         # Подключение обработки Serial портов
-        # runner.register_auto_handler("wait_signal", self.serial.handle_wait_signal)
-        # runner.register_auto_handler("send_and_wait", self.serial.handle_send_and_wait)
+        self.runner.register_auto_handler("wait_signal", self.serial.wait_signal)
+        self.runner.register_auto_handler("send_and_wait", self.serial.send_and_wait)
 
         self.ui_main_page.treeViewTaskList.setModel(self.model)
         self.ui_main_page.treeViewTaskList.setColumnWidth(0, 350)
@@ -212,7 +218,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.runner.start("9e47b1f0")
     
     def debug_next_step(self):
-        print("Debug next step")
+        self.runner.next_step()
     
     def debug_stop(self):
         self.runner.stop()

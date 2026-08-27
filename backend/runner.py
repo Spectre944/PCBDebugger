@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, Signal
 
-from backend.models.list_model import TaskListModel, TaskStatus
+from backend.models.list_model import TaskListModel, TaskStatus, STATUS_COLORS, STATUS_LABELS, STATUS_ROLE
 
 
 class ScenarioRunner(QObject):
@@ -49,6 +49,53 @@ class ScenarioRunner(QObject):
 
     def stop(self):
         self._running = False
+
+    def next_step(self):
+        """
+        Переходит к следующему шагу сценария.
+        Если текущий шаг ещё не выполнен (статус NOT_STARTED или RUNNING),
+        то переход блокируется до подтверждения оператора.
+        Если шаг уже имеет статус PASSED или FAILED - позволяет переход.
+        """
+        if not self._running or self.current_id is None:
+            print("Прогон не активен или нет текущего шага")
+            return
+        
+        index = self.model.get_index_by_id(self.current_id)
+        if index is None:
+            print(f"Крок '{self.current_id}' не знайдено, зупинка")
+            self._running = False
+            self.finished.emit()
+            return
+        
+        # Проверяем статус текущего шага
+        status = self.model.get_status(index)
+        
+        # Если шаг ещё не выполнен - блокируем переход
+        if status != TaskStatus.PASSED:
+            print("Ожидается подтверждение оператора о выполненном шаге")
+            return
+        
+        # Если шаг уже выполнен (PASSED или FAILED) - разрешаем переход
+        options = self.model.get_options(index)
+        
+        # Определяем следующий шаг в зависимости от результата
+        if status == TaskStatus.PASSED:
+            result = "pass"
+        else:  # TaskStatus.FAILED
+            result = "fail"
+        
+        step_result = options.get(result, {})
+        next_id = step_result.get("next")
+        pause = step_result.get("pause", False)
+        
+        if pause or not next_id:
+            self._running = False
+            self.finished.emit()
+            return
+        
+        self.current_id = next_id
+        self._process_current()
 
     def _process_current(self):
         if not self._running or self.current_id is None:
