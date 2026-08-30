@@ -8,7 +8,7 @@ from app.ui.pages.settings_page import Ui_settingsPage
 
 from backend.kicad_api import KiCAD_API
 from backend.session import DiagnosticSession
-from backend.runner import ScenarioRunner
+from backend.runner import ScenarioRunner, DebugState
 from backend.serial_manager import SerialManager
 from backend.serial_step_handler import SerialStepHandler
 
@@ -16,11 +16,11 @@ from backend.models.list_model import TaskListModel, TaskStatus, STATUS_COLORS, 
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QStackedWidget,
-    QFileDialog, QMessageBox, QPushButton, QLabel,
+    QFileDialog, QMessageBox, QPushButton,
     QSizePolicy, QSplitter, QMenu, QTreeView
 )
 from PySide6.QtGui import (
-    QPixmap, QColor, QUndoStack, QShortcut, QKeySequence, QStandardItemModel, QStandardItem, QColor, QBrush
+    QPixmap, QColor, QUndoStack, QShortcut, QKeySequence, QStandardItemModel, QStandardItem, QColor, QBrush, QIcon
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QModelIndex, QDateTime, QStandardPaths
 
@@ -77,7 +77,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Текстовий статус дебага (поки що просто дублюємо в той самий лог)
         self.runner.debugStatus.connect(self.append_log)
-        self.runner.debugStatus.connect(self.update_debug_status)
 
         self.ui_main_page.treeViewTaskList.setModel(self.model)
         self.ui_main_page.treeViewTaskList.setColumnWidth(0, 350)
@@ -92,7 +91,92 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         
         # Подключаем действия из меню
         self.connect_actions()
+
+        # Індикатори стану дебагу (кольорова точка + прогрес) і брейкпоінти
+        self._init_debug_indicators()
     
+    # ---- Індикатори дебагу: статус/прогрес/підказка на панелі + кнопки ----
+
+    # Колір тексту для кожного "сенсу" паузи — не всі PAUSED однакові
+    _INDICATOR_COLORS = {
+        "idle": "#8a8f98",       # сірий — сесія не активна
+        "running": "#2ecc71",    # зелений — йде автопрогін / чекаємо відповідь плати
+        "manual": "#f1c40f",     # жовтий — чекаємо, поки оператор сам відмітить результат
+        "breakpoint": "#e74c3c",  # червоний — зупинились на брейкпоінті (fail-graph або user)
+        "paused": "#7f8fa6",     # приглушений синьо-сірий — оператор сам натиснув Пауза
+        "finished": "#3498db",   # синій — сценарій пройдено до кінця
+    }
+
+    _HINT_TEXTS = {
+        "manual": "Відмітьте результат кроку (ПКМ у дереві → Перевірено/Провалено), потім натисніть «Наступний крок».",
+        "breakpoint": "Полагодьте плату і натисніть «Продовжити» (кнопка Старт/Пауза) — крок буде перевірено ще раз.",
+        "paused": "Дебаг на паузі. Натисніть «Продовжити», щоб піти далі з того самого місця.",
+        "running": "-",
+        "finished": "Сценарій пройдено до кінця. «Перезапустити» — почати заново.",
+        "idle": "Натисніть «Старт», щоб почати перевірку плати.",
+    }
+
+    def _init_debug_indicators(self):
+        # Причина останньої паузи — щоб stateChanged=="paused" знав, яким
+        # кольором/текстом/підказкою це показати (manual / breakpoint / просто pause).
+        self._last_pause_reason = "paused"
+
+        self.runner.waitingUser.connect(lambda step_id: self._set_pause_reason("manual"))
+        self.runner.breakpointHit.connect(lambda step_id: self._set_pause_reason("breakpoint"))
+        self.runner.stateChanged.connect(self._on_debug_state_changed)
+        self.runner.stepFinished.connect(lambda *_: self._update_progress_label())
+        self.runner.stepSkipped.connect(lambda *_: self._update_progress_label())
+
+        # Брейкпоінти в дереві — джерело правди runner, модель лише малює
+        self.runner.breakpointsChanged.connect(self.model.set_breakpoint_marker)
+
+        # Кнопки на панелі дебагу (mainPage) — дублюють дії з меню, тому
+        # обидва шляхи керування (меню і кнопки) працюють однаково.
+        self.ui_main_page.pushButtonDebugStartStop.clicked.connect(self.debug_start_pause)
+        self.ui_main_page.pushButtonDebugNextStep.clicked.connect(self.debug_next_step)
+        self.ui_main_page.pushButtonDebugRestart.clicked.connect(self.debug_restart)
+        self.ui_main_page.pushButtonDebugStop.clicked.connect(self.debug_stop)
+
+        self._on_debug_state_changed(self.runner.state.value)
+        self._update_progress_label()
+
+    def _set_pause_reason(self, reason: str):
+        self._last_pause_reason = reason
+
+    def _on_debug_state_changed(self, state_value: str):
+        if state_value == DebugState.RUNNING.value:
+            self._last_pause_reason = "paused"  # скидаємо — наступна пауза за замовчуванням "проста"
+            reason, text = "running", "Виконується…"
+            icon_theme, button_text = QIcon.ThemeIcon.MediaPlaybackPause, "Пауза"
+        elif state_value == DebugState.PAUSED.value:
+            reason = self._last_pause_reason
+            text = {
+                "manual": "Очікує дію оператора",
+                "breakpoint": "Зупинено на брейкпоінті",
+                "paused": "На паузі",
+            }[reason]
+            icon_theme, button_text = QIcon.ThemeIcon.MediaPlaybackStart, "Продовжити"
+        elif state_value == DebugState.FINISHED.value:
+            reason, text = "finished", "Сценарій завершено"
+            icon_theme, button_text = QIcon.ThemeIcon.MediaPlaybackStart, "Старт"
+        else:  # idle
+            reason, text = "idle", "Дебаг не запущено"
+            icon_theme, button_text = QIcon.ThemeIcon.MediaPlaybackStart, "Старт"
+
+        color = self._INDICATOR_COLORS[reason]
+        self.ui_main_page.label_debugStatus.setText(text)
+        self.ui_main_page.label_debugStatus.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+        self.ui_main_page.pushButtonDebugStartStop.setIcon(QIcon(QIcon.fromTheme(icon_theme)))
+        self.ui_main_page.pushButtonDebugStartStop.setToolTip(button_text)
+
+    def _update_progress_label(self):
+        counts = self.model.get_status_counts()
+        done = counts[TaskStatus.PASSED] + counts[TaskStatus.FAILED] + counts[TaskStatus.SKIPPED]
+        self.ui_main_page.label_debugOverallInfo.setText(
+            f"{done}/{counts['total']}  (помилок: {counts[TaskStatus.FAILED]}, пропущено: {counts[TaskStatus.SKIPPED]})"
+        )
+
     def connect_actions(self):
         """Подключение действий из меню к слотам"""
         self.action_openDigagnostic.triggered.connect(self.open_diagnostic)
@@ -137,12 +221,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         timestamp = QDateTime.currentDateTime().toString("HH:mm:ss")
         self.ui_main_page.textEditLog.append(f"[{timestamp}] {text}")
 
-    def update_debug_status(self, text: str):
-        self.ui_main_page.label_debug.setText(text)
-
-    def update_debug_hint(self, text: str):
-            self.ui_main_page.label_debug_hint.setText(text)
-
     # --- ПКМ: контекстное меню ---
     def on_context_menu(self, pos):
         index = self.ui_main_page.treeViewTaskList.indexAt(pos)
@@ -162,6 +240,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         menu.addSeparator()
         act_start_here = menu.addAction("Почати перевірку звідси")
+
+        step_id = self.model.get_id(index)
+        is_breakpoint = self.model.is_breakpoint_marker(index)
+        act_toggle_breakpoint = menu.addAction(
+            "Зняти брейкпоінт" if is_breakpoint else "Поставити брейкпоінт"
+        )
+
+        # Skip/Retry діють на ПОТОЧНИЙ крок раннера — застосовувати їх до
+        # довільного рядка дерева безглуздо (runner про нього "не думає").
+        act_skip = act_retry = None
+        if step_id == self.runner.current_id and self.runner.current_id is not None:
+            menu.addSeparator()
+            act_skip = menu.addAction("Пропустити крок (skip)")
+            act_retry = menu.addAction("Повторити крок")
 
         action = menu.exec(self.ui_main_page.treeViewTaskList.viewport().mapToGlobal(pos))
 
@@ -184,6 +276,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             # "Run to here" — стартуємо/перестрибуємо дебаг на обраний крок,
             # незалежно від того, де він зараз стоїть.
             self.runner.start(self.model.get_id(index))
+        elif action == act_toggle_breakpoint:
+            self.runner.toggle_breakpoint(step_id)
+        elif act_skip is not None and action == act_skip:
+            self.runner.skip_current()
+        elif act_retry is not None and action == act_retry:
+            self.runner.retry_current()
     
     # Слоты для действий меню
     def open_diagnostic(self):

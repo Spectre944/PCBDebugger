@@ -12,18 +12,21 @@ class TaskStatus(Enum):
     NOT_TESTED = 0
     PASSED = 1
     FAILED = 2
+    SKIPPED = 3
 
 
 STATUS_LABELS = {
     TaskStatus.NOT_TESTED: "Не перевірено",
     TaskStatus.PASSED: "Перевірено",
     TaskStatus.FAILED: "Провалено",
+    TaskStatus.SKIPPED: "Пропущено",
 }
 
 STATUS_COLORS = {
     TaskStatus.NOT_TESTED: None,
     TaskStatus.PASSED: QColor("#2ecc71"),
     TaskStatus.FAILED: QColor("#e74c3c"),
+    TaskStatus.SKIPPED: QColor("#f39c12"),
 }
 
 ID_ROLE = Qt.UserRole + 1
@@ -35,16 +38,21 @@ OPTIONS_ROLE = Qt.UserRole + 6
 KIND_ROLE = Qt.UserRole + 7
 TESTING_ROLE = Qt.UserRole + 8
 CURRENT_ROLE = Qt.UserRole + 9  # NEW: чи є цей рядок "поточним кроком" раннера
+TITLE_ROLE = Qt.UserRole + 10       # оригінальна назва кроку (без візуальних маркерів типу брейкпоінта)
+BREAKPOINT_ROLE = Qt.UserRole + 11  # чи стоїть на кроці брейкпоінт (візуальний стан, джерело правди — runner)
 
 # статус <-> ключ в options
 STATUS_TO_OPTION_KEY = {
     TaskStatus.PASSED: "pass",
     TaskStatus.FAILED: "fail",
+    TaskStatus.SKIPPED: "skip",
 }
 
 # Підсвітка поточного кроку — аналог жовтої стрілки на рядку в дебагері IDE
 CURRENT_STEP_BACKGROUND = QColor("#3a3f5c")
 CURRENT_STEP_MARKER_COLOR = QColor("#f1c40f")
+
+BREAKPOINT_PREFIX = "⛔ "  # текстовий маркер брейкпоінта в назві кроку (гутер тут не передбачений)
 
 
 def _make_current_step_icon() -> QIcon:
@@ -107,6 +115,8 @@ class TaskListModel(QStandardItemModel):
             name_item.setData(kind, KIND_ROLE)
             name_item.setData(testing, TESTING_ROLE)
             name_item.setData(False, CURRENT_ROLE)
+            name_item.setData(title, TITLE_ROLE)
+            name_item.setData(False, BREAKPOINT_ROLE)
 
             mode_labels = {"manual": "Ручний", "auto": "Автоматичний", "info": "Інформація"}
             type_item = QStandardItem(mode_labels.get(mode, mode))
@@ -123,8 +133,10 @@ class TaskListModel(QStandardItemModel):
         return self.item(index.row(), 0).data(ID_ROLE)
 
     def get_title(self, index: QModelIndex) -> str:
-        """Людяне ім'я кроку (те, що показано в дереві) — для логів замість id."""
-        return self.item(index.row(), 0).text()
+        """Людяне ім'я кроку (для логів) — з TITLE_ROLE, а не item.text(),
+        бо item.text() може містити візуальний префікс брейкпоінта."""
+        item = self.item(index.row(), 0)
+        return item.data(TITLE_ROLE) or item.text()
 
     def get_nets(self, index: QModelIndex) -> list:
         return self.item(index.row(), 0).data(NETS_ROLE) or []
@@ -233,3 +245,30 @@ class TaskListModel(QStandardItemModel):
         for row in range(self.rowCount()):
             index = self.index(row, 0)
             self.set_status(index, TaskStatus.NOT_TESTED)
+
+    # ---- Брейкпоінти (лише візуальне відображення; джерело правди — runner) ----
+
+    def set_breakpoint_marker(self, step_id: str, enabled: bool):
+        """Викликається у відповідь на runner.breakpointsChanged. Сам по собі
+        нічого не вирішує щодо зупинки дебагу — це суто позначка в дереві."""
+        index = self.get_index_by_id(step_id)
+        if index is None:
+            return
+        item = self.item(index.row(), 0)
+        item.setData(enabled, BREAKPOINT_ROLE)
+        original_title = item.data(TITLE_ROLE) or item.text()
+        item.setText((BREAKPOINT_PREFIX + original_title) if enabled else original_title)
+
+    def is_breakpoint_marker(self, index: QModelIndex) -> bool:
+        return bool(self.item(index.row(), 0).data(BREAKPOINT_ROLE))
+
+    # ---- Прогрес сценарію (для індикатора в статус-барі) ----
+
+    def get_status_counts(self) -> dict:
+        """{'total': N, TaskStatus.PASSED: n, TaskStatus.FAILED: n, ...} —
+        для лічильника "Пройдено X/Y, помилок: Z" у статус-барі."""
+        counts = {status: 0 for status in TaskStatus}
+        for row in range(self.rowCount()):
+            counts[self.get_status(self.index(row, 0))] += 1
+        counts["total"] = self.rowCount()
+        return counts

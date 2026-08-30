@@ -2,6 +2,15 @@ from PySide6.QtCore import QObject, Signal, QTimer, QByteArray
 from PySide6.QtSerialPort import QSerialPort
 
 
+# Максимальний розмір буфера на порт. _try_match "з'їдає" буфер лише тоді,
+# коли на порту є активне очікування (wait_signal/send_and_wait) — якщо
+# плата шле щось періодично, а зараз саме немає жодного активного кроку,
+# який це чекає, буфер ніколи не тримується і росте необмежено весь час
+# роботи програми. Достатньо тримати "хвіст" останніх кількох кілобайт —
+# для рамки "$...*" цього з великим запасом вистачає.
+MAX_BUFFER_SIZE = 8192
+
+
 class SerialManager(QObject):
     """
     Управляет несколькими COM-портами (например, RS485 и Bluetooth).
@@ -151,7 +160,10 @@ class SerialManager(QObject):
             return
 
         chunk = bytes(port.readAll())
-        self._buffers[port_key].extend(chunk)
+        buffer = self._buffers[port_key]
+        buffer.extend(chunk)
+        if len(buffer) > MAX_BUFFER_SIZE:
+            del buffer[: len(buffer) - MAX_BUFFER_SIZE]
         self.rawDataReceived.emit(port_key, chunk)
 
         self._try_match(port_key)
