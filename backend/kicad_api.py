@@ -1,7 +1,14 @@
+from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QObject, Signal
 from kipy import KiCad
 
-class KiCAD_API():
+
+class KiCAD_API(QObject):
+
+    connection_status_changed = Signal(str)
+
     def __init__(self):
+        super().__init__()
         self.kicad = None
         self.board = None
         self.nets = None
@@ -9,14 +16,64 @@ class KiCAD_API():
 
         self.connect()
 
-    def connect(self):
-        self.kicad = KiCad()
+    def connect(self, parent=None) -> bool:
+        try:
+            self.kicad = KiCad()
+        except Exception as e:
+            self._show_error(
+                parent,
+                "KiCad не запущено",
+                "Не вдалося підключитися до KiCad.\n\n"
+                "Перевірте, що:\n"
+                "• KiCad запущено\n"
+                "• У налаштуваннях KiCad увімкнено IPC API "
+                "(Налаштування → Плагіни та API)\n\n"
+                f"Деталі: {e}"
+            )
+            self.disconnect()
+            self.connection_status_changed.emit("Не владося з'єднатись з KiCad")
+            return False
 
-        self.board = self.kicad.get_board()
-        self.nets = self.board.get_nets()
-        self.footprints = self.board.get_footprints()
-        
+        try:
+            self.board = self.kicad.get_board()
+            self.nets = self.board.get_nets()
+            self.footprints = self.board.get_footprints()
 
+            # Эвристика: если нет ни цепей, ни footprint'ов — считаем, что проект не открыт
+            if len(self.nets) <= 1 and not self.footprints:
+                raise RuntimeError("Плата порожня або не відкрита")
+
+        except Exception as e:
+            self._show_error(
+                parent,
+                "Проєкт не відкрито",
+                "KiCad запущено, але не вдалося отримати доступ до плати.\n\n"
+                "Перевірте, що в KiCad відкрито проєкт/плату (PCB Editor).\n\n"
+                f"Деталі: {e}"
+            )
+            self.disconnect()
+            self.connection_status_changed.emit("Не владося з'єднатись з KiCad")
+            return False
+
+        self.connection_status_changed.emit("З'єднано з KiCad")
+        return True
+
+    def reconnect(self, parent=None) -> bool:
+        self.disconnect()
+        return self.connect(parent=parent)
+
+    def disconnect(self):
+        self.kicad = None
+        self.board = None
+        self.nets = None
+        self.footprints = None
+
+    def is_connected(self) -> bool:
+        return self.kicad is not None and self.board is not None
+
+    @staticmethod
+    def _show_error(parent, title, text):
+        QMessageBox.critical(parent, title, text)
 
     def clear_selection(self):
         self.board.clear_selection()

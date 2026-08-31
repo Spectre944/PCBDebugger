@@ -37,6 +37,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setStyleSheet("QMainWindow { background:#0e1120; }")
 
         self.kicad = KiCAD_API()
+        self.kicad.connection_status_changed.connect(self.show_status_bar_msg)
         
         # Создаем страницу из второго UI
         self.main_page_widget = QWidget()
@@ -329,8 +330,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.show()
     
     def connect_kicad(self):
-        print("Connect to KiCAD")
-        # self.kicad.select_footprint_pins("10VT1", "10D1")
+        self.kicad.disconnect()
+        self.kicad.connect()
 
     def debug_start_pause(self):
         # Одна кнопка: Start (з початку), Resume (після паузи/fail-брейкпоінта)
@@ -345,3 +346,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     
     def debug_restart(self):
         self.runner.restart()
+
+    def show_status_bar_msg(self, text):
+        self.statusBar().showMessage(text, 3000)
