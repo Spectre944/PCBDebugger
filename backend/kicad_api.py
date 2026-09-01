@@ -31,7 +31,7 @@ class KiCAD_API(QObject):
                 f"Деталі: {e}"
             )
             self.disconnect()
-            self.connection_status_changed.emit("Не владося з'єднатись з KiCad")
+            self.connection_status_changed.emit("Помилка: Не владося з'єднатись з KiCad")
             return False
 
         try:
@@ -52,10 +52,10 @@ class KiCAD_API(QObject):
                 f"Деталі: {e}"
             )
             self.disconnect()
-            self.connection_status_changed.emit("Не владося з'єднатись з KiCad")
+            self.connection_status_changed.emit("Помилка: Не владося з'єднатись з KiCad")
             return False
 
-        self.connection_status_changed.emit("З'єднано з KiCad")
+        self.connection_status_changed.emit("Інфо: З'єднано з KiCad")
         return True
 
     def reconnect(self, parent=None) -> bool:
@@ -76,9 +76,17 @@ class KiCAD_API(QObject):
         QMessageBox.critical(parent, title, text)
 
     def clear_selection(self):
+        if self.is_connected() == False:
+            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+            return
+        
         self.board.clear_selection()
 
     def select_net(self, *net_names, zoomToFit=False):
+        if self.is_connected() == False:
+            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+            return
+
         self.board.clear_selection()
         total = 0
 
@@ -98,6 +106,10 @@ class KiCAD_API(QObject):
             self.kicad.run_action("common.Control.zoomFitSelection")
 
     def select_net_pins(self, *net_names, zoomToFit=False):
+        if self.is_connected() == False:
+            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+            return
+        
         matched_pads = []
 
         for fp in self.footprints:
@@ -117,6 +129,10 @@ class KiCAD_API(QObject):
             self.kicad.run_action("common.Control.zoomFitSelection")
 
     def select_footprint_pins(self, *footprint_names, zoomToFit=False):
+        if self.is_connected == False:
+            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+            return
+
         matched_pads = []
         matched_footprints = []
 

@@ -18,7 +18,8 @@
     {
       "general": {
         "id": "9e47b1f0",
-        "title": "2. Перевірка ліній програмування та живлення 3.3В"
+        "title": "2. Перевірка ліній програмування та живлення 3.3В",
+		"description": ""
       },
       "testing": { "mode": "manual", "kind": "run_programmer" },
       "options": {
@@ -37,7 +38,7 @@
         "id": "3b8f1e6c",
         "title": "3.1 Перевірка вихідної лінії інтерфейсу USB"
       },
-      "testing": { "mode": "auto", "kind": "wait_signal", "expect" : "$RS TXD READY1*" },
+      "testing": { "mode": "auto", "kind": "wait_signal", "expect" : "$RS TXD READY1*", "source": "RS", "timeout_ms" : 3000 },
       "options": {
         "pass": { "next": "56d70bd4" },
         "fail": {
@@ -53,7 +54,7 @@
         "id": "56d70bd4",
         "title": "3.2 Перевірка вихідної лінії інтерфейсу Bluetooth"
       },
-      "testing": { "mode": "auto", "kind": "wait_signal", "expect" : "$RS TXD READY2*" },
+      "testing": { "mode": "auto", "kind": "wait_signal", "expect" : "$RS TXD READY2*",  "source": "BT", "timeout_ms" : 3000  },
       "options": {
         "pass": { "next": "c4a29f71" },
         "fail": {
@@ -69,11 +70,11 @@
         "id": "c4a29f71",
         "title": "4.1 Перевірка вхідної лінії інтерфейсу USB"
       },
-      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST1", "expect" : "$RS RXD READY1*" },
+      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST1", "expect" : "$RS RXD READY1*", "source": "RS" },
       "options": {
         "pass": { "next": "f209a6c3" },
         "fail": {
-          "next": "8d1b45e0",
+          "next": "c4a29f71",
           "pause": true,
           "log": "Немає відповіді READY1 — проблема з лінією D1_P102-X2_P3"
         }
@@ -85,11 +86,11 @@
         "id": "f209a6c3",
         "title": "4.2 Перевірка вхідної лінії інтерфейсу Bluetooth"
       },
-      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST2*", "expect" : "$RS RXD READY2"  },
+      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST2*", "expect" : "$RS RXD READY2", "source": "BT"  },
       "options": {
         "pass": { "next": "62e7d1b8" },
         "fail": {
-          "next": "8d1b45e0",
+          "next": "f209a6c3",
           "pause": true,
           "log": "Немає відповіді READY2 — проблема з лінією D1_P102-X2_P5"
         }
@@ -98,29 +99,49 @@
     },
     {
       "general": {
-        "id": "8d1b45e0",
-        "title": "4.3 Ручна перевірка виділених ліній (тестер, осцилограф)",
-        "description": "Перевірте виділені лінії тестером/осцилографом, усуньте несправність."
-      },
-      "testing": { "mode": "manual" },
-      "options": {
-        "pass": { "next": "c4a29f71" },
-        "fail": { "next": "8d1b45e0", "pause": true }
-      },
-      "nets": ["USART1_RX", "USART6_RX"]
-    },
-    {
-      "general": {
         "id": "62e7d1b8",
-        "title": "5. Перевірка роботи генератора"
+        "title": "5. Перевірка роботи генератора",
+		"description": "Подаємо на плату команду '$GEN EN *' і знову перевіряємо відповідь від процесора"
       },
-      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$GEN EN *", "expect" : "-" },
+      "testing": { "mode": "auto", "kind": "send_signal", "send" : "$GEN EN *", "source" : "RS" },
       "options": {
-        "pass": { "next": "1a5c9f34" },
+        "pass": { "next": "a893ba8d" },
         "fail": {
           "next": "62e7d1b8",
           "pause": true,
           "log": "Немає відповіді від плати — проблема генератора: лінія D1_P23-D2_P3 та мікросхема D2"
+        }
+      },
+      "nets": ["OSC_IN"]
+    },
+	{
+      "general": {
+        "id": "a893ba8d",
+        "title": "5.1 Перевірка інтерфейсу USB від роботи генератора"
+      },
+      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST1", "expect" : "$RS RXD READY1*", "source": "RS" },
+      "options": {
+        "pass": { "next": "2186db29" },
+        "fail": {
+          "next": "a893ba8d",
+          "pause": true,
+          "log": "Немає відповіді READY1 — проблема з лінією OSC_IN"
+        }
+      },
+      "nets": ["OSC_IN"]
+    },
+	{
+      "general": {
+        "id": "2186db29",
+        "title": "5.2 Перевірка інтерфейсу Bluetooth від роботи генератора"
+      },
+      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST2*", "expect" : "$RS RXD READY2", "source": "BT"  },
+      "options": {
+        "pass": { "next": "1a5c9f34" },
+        "fail": {
+          "next": "2186db29",
+          "pause": true,
+          "log": "Немає відповіді READY2 — проблема з лінією OSC_IN"
         }
       },
       "nets": ["OSC_IN"]

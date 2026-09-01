@@ -101,6 +101,31 @@ class SerialManager(QObject):
         port.write(QByteArray(data))
         port.flush()
 
+    def send_signal(self, port_key: str, data: bytes,  timeout_ms: int = 2000) -> bool:
+        """
+        Отправляем команду на плату без ожидання відповіді ("fire and
+        forget"). Повертає True/False — вдалося записати в порт чи ні.
+        
+        ВАЖЛИВО: тут немає match_fn і немає self._pending — на відміну від
+        send_and_wait/wait_signal, тут просто нічого чекати: якщо запис у
+        порт пройшов успішно, це і є весь "результат" цієї команди. Саме
+        тому функція повертає bool синхронно, замість того, щоб потім
+        сповіщати про результат через сигнал responseReceived — його тут
+        просто нема кому емітити.
+        """
+        port = self._ports.get(port_key)
+        if port is None or not port.isOpen():
+            self.requestFailed.emit(port_key, "port_not_connected")
+            return
+
+        if port_key in self._pending:
+            self.requestFailed.emit(port_key, "busy")
+            return
+
+        port.write(QByteArray(data))
+        port.flush()
+        return True
+
     def wait_signal(self, port_key: str, match_fn, timeout_ms: int = 2000):
         """
         Ничего не отправляет — просто ждёт, пока в буфере не появится

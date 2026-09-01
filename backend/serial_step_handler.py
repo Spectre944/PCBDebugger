@@ -43,14 +43,6 @@ from PySide6.QtCore import QObject
 DEFAULT_TIMEOUT_MS = 2000
 
 
-def _extract_port_key(pattern: str) -> str:
-    """'$RS TXD READY2*' -> 'RS'"""
-    if not pattern:
-        return ""
-    token = pattern.split()[0]
-    return token.lstrip("$")
-
-
 def build_match_fn(expect: str):
     """
     Пакет — рамка "$...*". Шукаємо рядок expect ЦІЛИКОМ (включно з кінцевим
@@ -85,6 +77,7 @@ class SerialStepHandler(QObject):
         # Потрібен, щоб "чужа"/запізніла відповідь не закрила не свій крок.
         self._active_port = None
 
+        runner.register_auto_handler("send_signal", self._handle_send_signal)
         runner.register_auto_handler("wait_signal", self._handle_wait_signal)
         runner.register_auto_handler("send_and_wait", self._handle_send_and_wait)
 
@@ -93,12 +86,22 @@ class SerialStepHandler(QObject):
 
     # ---- Обробники auto-кроків, викликаються ScenarioRunner ----
 
+    def _handle_send_signal(self, index):
+        testing = self.model.get_testing(index)
+        data = testing.get("send", "")
+        port_key = testing.get("source")
+
+        self._active_port = port_key
+
+        if self.serial.send_signal(port_key, data):
+            self.runner.report_result("pass")
+
     def _handle_wait_signal(self, index):
         testing = self.model.get_testing(index)
         expect = testing.get("expect", "")
         timeout_ms = testing.get("timeout_ms", DEFAULT_TIMEOUT_MS)
 
-        port_key = _extract_port_key(expect)
+        port_key = testing.get("source")
         match_fn = build_match_fn(expect)
 
         self._active_port = port_key
@@ -114,7 +117,7 @@ class SerialStepHandler(QObject):
         # дописуємо, бо кадр "$...*" вже сам собі термінатор.
         send_suffix = testing.get("send_suffix", "")
 
-        port_key = _extract_port_key(send) or _extract_port_key(expect)
+        port_key = testing.get("source")
         match_fn = build_match_fn(expect)
         data = (send + send_suffix).encode()
 
