@@ -6,7 +6,7 @@ from app.ui.pages.main_page import Ui_mainPage
 from app.ui.pages.main_window import Ui_MainWindow
 from app.ui.pages.settings_page import Ui_settingsPage
 
-from backend.kicad_api import KiCAD_API
+from backend.kicad_api import KiCadApi
 from backend.session import DiagnosticSession
 from backend.runner import ScenarioRunner, DebugState
 from backend.serial_manager import SerialManager
@@ -36,8 +36,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.resize(1280, 460)
         self.setStyleSheet("QMainWindow { background:#0e1120; }")
 
-        self.kicad = KiCAD_API()
+        self.kicad = KiCadApi(self)
         self.kicad.connection_status_changed.connect(self.show_status_bar_msg)
+        self.kicad.selected_nets_changed.connect(self.update_selected_nets)
+        self.kicad.connection_error.connect(self.show_connection_error)
+        self.kicad.connect()
         
         # Создаем страницу из второго UI
         self.main_page_widget = QWidget()
@@ -75,6 +78,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # яка не працювала — runner викликає handler(index), а serial чекає
         # (port_key, match_fn, timeout))
         self.serial_step_handler = SerialStepHandler(self.runner, self.serial, self.model)
+
+        # Сигнал из SerialStepHandler для подсветки неработающих линий
+        self.serial_step_handler.select_bad_nets.connect(
+            lambda nets: self.kicad.select_net(*nets, zoom_to_fit=False)
+        )
 
         # Текстовий статус дебага (поки що просто дублюємо в той самий лог)
         self.runner.debugStatus.connect(self.append_log)
@@ -195,7 +203,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             index = index.siblingAtColumn(0)
         self.update_info(index)
         nets = self.model.get_nets(index)
-        self.kicad.select_net(*nets, zoomToFit=False)
+        self.kicad.select_net(*nets, zoom_to_fit=False)
 
     # --- Двойной клик: выделить сети + zoomToFit ---
     def on_double_click(self, index: QModelIndex):
@@ -203,7 +211,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             index = index.siblingAtColumn(0)
         self.update_info(index)
         nets = self.model.get_nets(index)
-        self.kicad.select_net(*nets, zoomToFit=True)
+        self.kicad.select_net(*nets, zoom_to_fit=True)
 
     # --- Обновление info-панели по выбранному шагу ---
     def update_info(self, index: QModelIndex):
@@ -213,9 +221,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.ui_main_page.label_description.setText(description)
         self.ui_main_page.label_hint.setText(hint)
-        self.ui_main_page.label_objSelect.setText(
-            "Обрано nets: " + (", ".join(nets) if nets else "-")
-        )
 
     # --- Добавление записи в лог с таймштампом ---
     def append_log(self, text: str):
@@ -269,10 +274,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.update_info(index)
         elif action == act_highlight_nets:
             for net_name in self.model.get_nets(index):
-                self.kicad.select_net(net_name, zoomToFit=False)
+                self.kicad.select_net(net_name, zoom_to_fit=False)
         elif action == act_highlight_pins:
             nets = self.model.get_nets(index)
-            self.kicad.select_net_pins(*nets, zoomToFit=False)
+            self.kicad.select_net_pins(*nets, zoom_to_fit=False)
         elif action == act_start_here:
             # "Run to here" — стартуємо/перестрибуємо дебаг на обраний крок,
             # незалежно від того, де він зараз стоїть.
@@ -349,3 +354,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def show_status_bar_msg(self, text):
         self.statusBar().showMessage(text, 3000)
+
+    def update_selected_nets(self, nets):
+        self.ui_main_page.label_objSelect.setText(
+            "Обрано nets: " + (", ".join(nets) if nets else "-")
+        )
+
+    def show_connection_error(self, title: str, message: str) -> None:
+        QMessageBox.critical(self, title, message)

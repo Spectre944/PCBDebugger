@@ -1,6 +1,6 @@
 from enum import Enum
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QTimer
 
 from backend.models.list_model import (
     TaskListModel,
@@ -39,7 +39,7 @@ class ScenarioRunner(QObject):
 
     Текущий шаг раннера всегда отражается в модели через model.set_current()
     (маркер вроде "стрелки" на строке в дебагере IDE), а все текстовые статусы
-    відладку идут через единый канал debugStatus (см. _status()), с человеко-
+    дебага идут через единый канал debugStatus (см. _status()), с человеко-
     читаемым названием шага (title), а не его техническим id.
     """
 
@@ -74,6 +74,15 @@ class ScenarioRunner(QObject):
         """
         print(msg)
         self.debugStatus.emit(msg)
+
+    def log_detail(self, msg: str):
+        """
+        Публічна версія _status для зовнішніх учасників (наприклад,
+        SerialStepHandler), яким потрібно додати деталізовані рядки в той
+        самий лог — наприклад, "які саме піни не збіглися і чому" — не
+        змінюючи стан раннера і не дублюючи логіку емісії сигналу.
+        """
+        self._status(msg)
 
     def _set_state(self, state: DebugState):
         if self._state == state:
@@ -372,7 +381,7 @@ class ScenarioRunner(QObject):
 
         nets = self.model.get_nets(index)
         if nets and self.kicad:
-            self.kicad.select_net(*nets, zoomToFit=False)
+            self.kicad.select_net(*nets, zoom_to_fit=False)
 
         self.stepStarted.emit(self.current_id)
 
@@ -422,4 +431,6 @@ class ScenarioRunner(QObject):
         self.stepFinished.emit(self.current_id, result)
         self._status(f"Крок '{self._step_label(self.current_id)}': результат = {result}")
 
-        self._advance_from(index, result)
+        # Задерка между шагами для более понятного UI
+        QTimer.singleShot(200, lambda: self._advance_from(index, result))
+        

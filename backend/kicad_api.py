@@ -1,155 +1,265 @@
-from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import QObject, Signal
 from kipy import KiCad
 
 
-class KiCAD_API(QObject):
+CONNECTION_ERROR = "Помилка: Не вдалося з'єднатися з KiCad"
+NOT_CONNECTED = "Помилка: Відсутнє з'єднання з KiCad"
+CONNECTION_SUCCESS = "Інфо: З'єднано з KiCad"
+
+ZOOM_TO_SELECTION_ACTION = "common.Control.zoomFitSelection"
+
+
+class KiCadApi(QObject):
+    """Interface for communication with KiCad via IPC API."""
 
     connection_status_changed = Signal(str)
+    connection_error = Signal(str, str)
+    selected_nets_changed = Signal(list)
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
         self.kicad = None
         self.board = None
         self.nets = None
         self.footprints = None
+        self.settings = None
 
-        self.connect()
+    # -------------------------------------------------------------------------
+    # Connection
+    # -------------------------------------------------------------------------
 
-    def connect(self, parent=None) -> bool:
+    def connect(self) -> bool:
+        """Connect to KiCad and initialize the current board."""
+
+        self.disconnect()
+
         try:
             self.kicad = KiCad()
-        except Exception as e:
-            self._show_error(
-                parent,
+        except Exception as exc:
+            self._handle_connection_error(
                 "KiCad не запущено",
-                "Не вдалося підключитися до KiCad.\n\n"
-                "Перевірте, що:\n"
-                "• KiCad запущено\n"
-                "• У налаштуваннях KiCad увімкнено IPC API "
-                "(Налаштування → Плагіни та API)\n\n"
-                f"Деталі: {e}"
+                (
+                    "Не вдалося підключитися до KiCad.\n\n"
+                    "Перевірте, що:\n"
+                    "• KiCad запущено\n"
+                    "• У налаштуваннях KiCad увімкнено IPC API "
+                    "(Налаштування → Плагіни та API)\n\n"
+                    f"Деталі: {exc}"
+                ),
             )
-            self.disconnect()
-            self.connection_status_changed.emit("Помилка: Не владося з'єднатись з KiCad")
             return False
 
         try:
             self.board = self.kicad.get_board()
             self.nets = self.board.get_nets()
             self.footprints = self.board.get_footprints()
+            self.settings = self.board.get_editor_appearance_settings()
 
-            # Эвристика: если нет ни цепей, ни footprint'ов — считаем, что проект не открыт
+            self._configure_board()
+
             if len(self.nets) <= 1 and not self.footprints:
                 raise RuntimeError("Плата порожня або не відкрита")
 
-        except Exception as e:
-            self._show_error(
-                parent,
+        except Exception as exc:
+            self._handle_connection_error(
                 "Проєкт не відкрито",
-                "KiCad запущено, але не вдалося отримати доступ до плати.\n\n"
-                "Перевірте, що в KiCad відкрито проєкт/плату (PCB Editor).\n\n"
-                f"Деталі: {e}"
+                (
+                    "KiCad запущено, але не вдалося отримати доступ до плати.\n\n"
+                    "Перевірте, що в KiCad відкрито проєкт/плату "
+                    "(PCB Editor).\n\n"
+                    f"Деталі: {exc}"
+                ),
             )
-            self.disconnect()
-            self.connection_status_changed.emit("Помилка: Не владося з'єднатись з KiCad")
             return False
 
-        self.connection_status_changed.emit("Інфо: З'єднано з KiCad")
+        self.connection_status_changed.emit(CONNECTION_SUCCESS)
         return True
 
-    def reconnect(self, parent=None) -> bool:
-        self.disconnect()
-        return self.connect(parent=parent)
+    def reconnect(self) -> bool:
+        """Reconnect to KiCad."""
 
-    def disconnect(self):
+        return self.connect()
+
+    def disconnect(self) -> None:
+        """Reset the current KiCad connection."""
+
         self.kicad = None
         self.board = None
         self.nets = None
         self.footprints = None
+        self.settings = None
 
     def is_connected(self) -> bool:
+        """Return True if KiCad and a board are available."""
+
         return self.kicad is not None and self.board is not None
 
-    @staticmethod
-    def _show_error(parent, title, text):
-        QMessageBox.critical(parent, title, text)
+    # -------------------------------------------------------------------------
+    # Board
+    # -------------------------------------------------------------------------
 
-    def clear_selection(self):
-        if self.is_connected() == False:
-            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+    def _configure_board(self) -> None:
+        """Apply required appearance settings to the current board."""
+
+        self.settings.net_color_display = 0 # or 1 (brighter color)
+        self.board.set_editor_appearance_settings(self.settings)
+
+    # -------------------------------------------------------------------------
+    # Selection
+    # -------------------------------------------------------------------------
+
+    def clear_selection(self) -> None:
+        """Clear the current selection in KiCad."""
+
+        if not self._check_connection():
             return
-        
+
         self.board.clear_selection()
 
-    def select_net(self, *net_names, zoomToFit=False):
-        if self.is_connected() == False:
-            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+    def select_net(
+        self,
+        *net_names: str,
+        zoom_to_fit: bool = False,
+    ) -> None:
+        """
+        Select all items belonging to the specified nets.
+
+        Args:
+            *net_names: Names of the nets to select.
+            zoom_to_fit: Zoom the view to the selected items.
+        """
+
+        if not self._check_connection():
             return
 
         self.board.clear_selection()
-        total = 0
+
+        selected_nets = []
+        total_items = 0
 
         for net_name in net_names:
-            target_net = next((n for n in self.nets if n.name == net_name), None)
-            if target_net is None:
-                print(f"Net '{net_name}' не знайдена")
+            net = self._find_net(net_name)
+
+            if net is None:
                 continue
 
-            items = self.board.get_items_by_net(target_net)
+            items = self.board.get_items_by_net(net)
+
+            if not items:
+                continue
+
             self.board.add_to_selection(items)
-            total += len(items)
 
-        print(f"Обрано {total} обєктів для мереж: {', '.join(net_names)}")
+            selected_nets.append(net_name)
+            total_items += len(items)
 
-        if zoomToFit:
-            self.kicad.run_action("common.Control.zoomFitSelection")
+        self.selected_nets_changed.emit(selected_nets)
 
-    def select_net_pins(self, *net_names, zoomToFit=False):
-        if self.is_connected() == False:
-            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+        if zoom_to_fit and total_items:
+            self._zoom_to_selection()
+
+    def select_net_pins(
+        self,
+        *net_names: str,
+        zoom_to_fit: bool = False,
+    ) -> None:
+        """
+        Select all pads belonging to the specified nets.
+
+        Args:
+            *net_names: Names of the nets whose pads should be selected.
+            zoom_to_fit: Zoom the view to the selected pads.
+        """
+
+        if not self._check_connection():
             return
-        
+
+        net_names = set(net_names)
         matched_pads = []
 
-        for fp in self.footprints:
-            for pad in fp.definition.pads:
-                if pad.net.name in net_names:
+        for footprint in self.footprints:
+            for pad in footprint.definition.pads:
+                if pad.net and pad.net.name in net_names:
                     matched_pads.append(pad)
 
         if not matched_pads:
-            print(f"Піни net {', '.join(net_names)} не знайдені")
             return
 
         self.board.clear_selection()
         self.board.add_to_selection(matched_pads)
-        print(f"Обрано {len(matched_pads)} пінів для net: {', '.join(net_names)}")
 
-        if zoomToFit:
-            self.kicad.run_action("common.Control.zoomFitSelection")
+        if zoom_to_fit:
+            self._zoom_to_selection()
 
-    def select_footprint_pins(self, *footprint_names, zoomToFit=False):
-        if self.is_connected == False:
-            self.connection_status_changed.emit("Помилка: Відсутнє з'єднання з KiCad")
+    def select_footprint_pins(
+        self,
+        *footprint_names: str,
+        zoom_to_fit: bool = False,
+    ) -> None:
+        """
+        Select all pads belonging to the specified footprints.
+
+        Args:
+            *footprint_names: References of the footprints.
+            zoom_to_fit: Zoom the view to the selected pads.
+        """
+
+        if not self._check_connection():
             return
 
+        footprint_names = set(footprint_names)
         matched_pads = []
-        matched_footprints = []
 
-        for fp in self.footprints:
-            fp_name = fp.reference_field.text.value
+        for footprint in self.footprints:
+            name = footprint.reference_field.text.value
 
-            if fp_name in footprint_names:
-                matched_footprints.append(fp_name)
-                matched_pads.extend(fp.definition.pads)
+            if name in footprint_names:
+                matched_pads.extend(footprint.definition.pads)
 
         if not matched_pads:
-            print(f"Футпринти {', '.join(footprint_names)} не знайдені")
             return
 
         self.board.clear_selection()
         self.board.add_to_selection(matched_pads)
-        print(f"Обрано {len(matched_pads)} пінів для футпринтів: {', '.join(matched_footprints)}")
 
-        if zoomToFit:
-            self.kicad.run_action("common.Control.zoomFitSelection")
+        if zoom_to_fit:
+            self._zoom_to_selection()
+
+    # -------------------------------------------------------------------------
+    # Internal
+    # -------------------------------------------------------------------------
+
+    def _check_connection(self) -> bool:
+        """Check whether the API is connected to KiCad."""
+
+        if self.is_connected():
+            return True
+
+        self.connection_status_changed.emit(NOT_CONNECTED)
+        return False
+
+    def _find_net(self, net_name: str):
+        """Find a net by its name."""
+
+        return next(
+            (net for net in self.nets if net.name == net_name),
+            None,
+        )
+
+    def _zoom_to_selection(self) -> None:
+        """Zoom KiCad view to the current selection."""
+
+        self.kicad.run_action(ZOOM_TO_SELECTION_ACTION)
+
+    def _handle_connection_error(
+        self,
+        title: str,
+        message: str,
+    ) -> None:
+        """Reset connection and notify listeners about an error."""
+
+        self.disconnect()
+
+        self.connection_error.emit(title, message)
+        self.connection_status_changed.emit(CONNECTION_ERROR)
