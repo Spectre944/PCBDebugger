@@ -52,6 +52,7 @@ class ScenarioRunner(QObject):
     finished = Signal()                   # відладк остановлен (pause / нет next / нет обработчика)
     debugStatus = Signal(str)             # человекочитаемый статус дебага для UI/консоли
     stateChanged = Signal(str)            # DebugState.value — для кнопки Start/Pause и индикаторов в UI
+    restartRequested = Signal(str)        # DebugState.value — для кнопки Start/Pause и индикаторов в UI
 
     def __init__(self, model: TaskListModel, kicad=None, parent=None):
         super().__init__(parent)
@@ -194,6 +195,7 @@ class ScenarioRunner(QObject):
         self.model.reset_statuses()
         self.model.clear_current()
         self._status("Дебаг перезапущено з початку сценарію")
+        self.restartRequested.emit(self.current_id)
         self.start()
 
     def retry_current(self):
@@ -287,12 +289,9 @@ class ScenarioRunner(QObject):
                 self.breakpointHit.emit(self.current_id)
             self._set_state(DebugState.PAUSED if pause else DebugState.FINISHED)
             if pause:
-                self._status(
-                    f"Крок '{self._step_label(self.current_id)}': брейкпоінт — "
-                    f"натисніть 'Продовжити' (Старт/Пауза), а не 'Наступний крок'"
-                )
+                self._status( f"Дебаг поставлено на паузу" )
             else:
-                self._status(f"Крок '{self._step_label(self.current_id)}': сценарій завершено, наступного кроку немає")
+                self._status(f"Сценарій завершено, наступного кроку немає")
             self.finished.emit()
             return
 
@@ -410,7 +409,7 @@ class ScenarioRunner(QObject):
                 self.finished.emit()
                 return
             self._set_state(DebugState.RUNNING)
-            self._status(f"Крок '{self._step_label(self.current_id)}': автоперевірка kind='{kind}' запущена")
+            self._status(f"Крок '{self._step_label(self.current_id)}': тип перевірки ( <span style='color:cyan'>{kind.upper()} </span>)")
             handler(index)
             return
 
@@ -429,7 +428,9 @@ class ScenarioRunner(QObject):
         status = TaskStatus.PASSED if result == "pass" else TaskStatus.FAILED
         self.model.set_status(index, status)
         self.stepFinished.emit(self.current_id, result)
-        self._status(f"Крок '{self._step_label(self.current_id)}': результат = {result}")
+        # Выбор цвета в зависимости от результата
+        color = "green" if result == "pass" else "red"
+        self._status(f"Крок '{self._step_label(self.current_id)}' — [ <span style='color:{color}'>{result.upper()}</span> ]")
 
         # Задерка между шагами для более понятного UI
         QTimer.singleShot(200, lambda: self._advance_from(index, result))

@@ -14,6 +14,54 @@ DEFAULT_STEP_DELAY_MS = 500
 _PIN_VALUE_RE = re.compile(r"P(\d+)=([01])")
 
 
+def build_pin_report_table(
+    pin_to_net: dict,
+    value_rows: dict[int, tuple[int, int | None]] | None = None,
+    timeout_pins=(),
+    designator: str = "D1",
+) -> str:
+    """
+    Формує HTML-таблицю для логу замість довгого рядка через кому — саме
+    ці рядки ("P63(очік.1/факт.0), P64(...), ..." x18) і були
+    "нечитаемо" при великих групах пінів. QTextEdit розуміє базовий HTML
+    у append(), тому таблиця рендериться як таблиця, а не як текст.
+
+    value_rows: {пін: (очікувано, факт)} — пини з неправильним значенням
+                (факт може бути None, якщо пін просто відсутній у кадрі).
+    timeout_pins: піни, на яких відповіді не було взагалі (інша причина
+                  несправності — обрив зв'язку, а не конкретна лінія).
+    """
+    value_rows = value_rows or {}
+    if not value_rows and not timeout_pins:
+        return ""
+
+    rows_html = []
+    for pin in sorted(value_rows):
+        expected, actual = value_rows[pin]
+        net = pin_to_net.get(f"{designator}:{pin}", "-")
+        actual_text = str(actual) if actual is not None else "відсутній у відповіді"
+        rows_html.append(
+            f"<tr><td>P{pin}</td><td>невірне значення</td>"
+            f"<td>{expected}</td><td>{actual_text}</td><td>{net}</td></tr>"
+        )
+    for pin in sorted(timeout_pins):
+        net = pin_to_net.get(f"{designator}:{pin}", "-")
+        rows_html.append(
+            f"<tr><td>P{pin}</td><td>немає відповіді</td>"
+            f"<td>—</td><td>—</td><td>{net}</td></tr>"
+        )
+
+    return (
+        '<table border="1" cellspacing="0" cellpadding="4" '
+        'style="border-collapse:collapse; font-family:Consolas,monospace; font-size:12px;">'
+        "<tr>"
+        "<th>Пін</th><th>Проблема</th><th>Очікувано</th><th>Факт</th><th>Net</th>"
+        "</tr>"
+        + "".join(rows_html)
+        + "</table>"
+    )
+
+
 @dataclass
 class PinSweepState:
     """Состояние последовательной проверки группы выводов."""
@@ -27,6 +75,10 @@ class PinSweepState:
     remaining: list[int] = field(init=False)
     bad_pins: set[int] = field(default_factory=set)
     timeout_pins: set[int] = field(default_factory=set)
+    # Пін -> (очікувано, факт) для ПЕРШОГО разу, коли пін виявився поганим —
+    # потрібно лише для підсумкової таблиці в кінці обходу, щоб не тягнути
+    # повний список на кожній ітерації (це й було головним джерелом шуму).
+    mismatch_details: dict[int, tuple[int, int | None]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.remaining = list(self.pins)
@@ -586,24 +638,18 @@ class SerialStepHandler(QObject):
 
         if mismatches:
             state.bad_pins.update(mismatches)
+            for current_pin, pair in mismatches.items():
+                # Тримаємо лише ПЕРШИЙ випадок кожного піна — для звіту в
+                # кінці досить одного прикладу "чому саме він поганий";
+                # значення все одно майже завжди однакові на кожній ітерації.
+                state.mismatch_details.setdefault(current_pin, pair)
 
-            details = ", ".join(
-                (
-                    f"P{current_pin}"
-                    f"(очік.{expected_value}/"
-                    f"факт.{actual_value if actual_value is not None else '?'})"
-                )
-                for current_pin, (
-                    expected_value,
-                    actual_value,
-                ) in sorted(mismatches.items())
-            )
-
-            self.runner.log_detail(
-                f"pin_sweep: ціль P{pin}={state.value} — "
-                f"розбіжність: {details}"
-            )
-
+            # ВИПРАВЛЕНО (нечитаемость): раніше тут друкувався повний
+            # список всіх розбіжностей (до 18 пінів в один рядок) — і так
+            # на КОЖНІЙ з N ітерацій, тобто та сама простиня повторювалась
+            # N разів майже без змін. Тепер лише короткий підсумок за
+            # ітерацію; повна таблиця — один раз, в кінці обходу.
+            # self.runner.log_detail( f"PIN_SWEEP: ціль P{pin}={state.value} — розбіжність ({len(mismatches)} пінів, деталі в підсумку)" )
         self._advance_pin_sweep(state)
 
     def _handle_pin_failure(
@@ -617,7 +663,7 @@ class SerialStepHandler(QObject):
         state.timeout_pins.add(pin)
 
         self.runner.log_detail(
-            f"pin_sweep: ціль P{pin}={state.value} — "
+            f"PIN_SWEEP: ціль P{pin}={state.value} — "
             f"немає відповіді від плати "
             f"(timeout, {reason})"
         )
@@ -635,38 +681,19 @@ class SerialStepHandler(QObject):
         self._current_set_port = None
 
         if not failed_pins:
-            self.runner.log_detail(
-                f"pin_sweep: усі {state.total_pins} "
-                f"пінів пройшли перевірку"
-            )
-
+            self.runner.log_detail( f"PIN_SWEEP: усі {state.total_pins} пінів пройшли перевірку" )
             self.runner.report_result("pass")
             return
 
-        summary: list[str] = []
-
-        if state.bad_pins:
-            summary.append(
-                "невірне значення: "
-                + ", ".join(
-                    f"P{pin}"
-                    for pin in sorted(state.bad_pins)
-                )
-            )
-
-        if state.timeout_pins:
-            summary.append(
-                "немає відповіді: "
-                + ", ".join(
-                    f"P{pin}"
-                    for pin in sorted(state.timeout_pins)
-                )
-            )
-
         self.runner.log_detail(
-            f"pin_sweep: проблемні лінії "
-            f"({len(failed_pins)} з {state.total_pins}) — "
-            + "; ".join(summary)
+            f"PIN_SWEEP: проблемні лінії ({len(failed_pins)} з {state.total_pins})"
+        )
+        self.runner.log_detail(
+            build_pin_report_table(
+                self.pin_to_net,
+                state.mismatch_details,
+                state.timeout_pins,
+            )
         )
 
         bad_nets = get_nets_for_pins(
@@ -731,20 +758,11 @@ class SerialStepHandler(QObject):
             self.runner.report_result("pass")
             return
 
-        details = ", ".join(
-            (
-                f"P{pin}"
-                f"(очік.{expected_value}/"
-                f"факт.{actual_value if actual_value is not None else '?'})"
-            )
-            for pin, (
-                expected_value,
-                actual_value,
-            ) in sorted(mismatches.items())
-        )
-
         self.runner.log_detail(
-            f"port_check: розбіжність — {details}"
+            f"PORT_CHECK: розбіжність ({len(mismatches)} з {len(expected)} пінів)"
+        )
+        self.runner.log_detail(
+            build_pin_report_table(self.pin_to_net, mismatches)
         )
 
         bad_nets = get_nets_for_pins(

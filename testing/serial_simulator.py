@@ -14,7 +14,7 @@ BLUETOOTH_READY = b"$RS TXD READY2*"
 USB_RX_TEST = b"$RS RXD TEST1*"
 BLUETOOTH_RX_TEST = b"$RS RXD TEST2*"
 
-ALL_OUT_NET_PREFIX = "$ALL OUT NET*"
+ALL_OUT_NET_PREFIX = "$ALL OUT NET"
 ALL_TEST_OUT = "$ALL TEST OUT*"
 PIN_PREFIX = "$PIN "
 
@@ -274,6 +274,7 @@ class SerialSimulator(QObject):
                 port_key,
                 b"$RS RXD READY1*",
             )
+            self.start()
             return
 
         if command == BLUETOOTH_RX_TEST:
@@ -281,6 +282,7 @@ class SerialSimulator(QObject):
                 port_key,
                 b"$RS RXD READY2*",
             )
+            self.start()
             return
 
         if command_text.startswith(ALL_OUT_NET_PREFIX):

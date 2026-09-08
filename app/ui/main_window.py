@@ -135,6 +135,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.runner.stateChanged.connect(self._on_debug_state_changed)
         self.runner.stepFinished.connect(lambda *_: self._update_progress_label())
         self.runner.stepSkipped.connect(lambda *_: self._update_progress_label())
+        self.runner.restartRequested.connect(lambda *_: self._update_progress_label())
+
 
         # Брейкпоінти в дереві — джерело правди runner, модель лише малює
         self.runner.breakpointsChanged.connect(self.model.set_breakpoint_marker)
@@ -161,7 +163,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             reason = self._last_pause_reason
             text = {
                 "manual": "Очікує дію оператора",
-                "breakpoint": "Зупинено на брейкпоінті",
+                "breakpoint": "Зупинено",
                 "paused": "На паузі",
             }[reason]
             icon_theme, button_text = QIcon.ThemeIcon.MediaPlaybackStart, "Продовжити"

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'mainWindowISCbFr.ui'
+## Form generated from reading UI file 'mainWindowWFXgrF.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.11.1
+## Created by: Qt User Interface Compiler version 6.10.2
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -148,6 +148,7 @@ class Ui_mainPage(object):
         self.textEditLog = QTextEdit(mainPage)
         self.textEditLog.setObjectName(u"textEditLog")
         self.textEditLog.setTabChangesFocus(True)
+        self.textEditLog.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
 
         self.verticalLayout_3.addWidget(self.textEditLog)
 
