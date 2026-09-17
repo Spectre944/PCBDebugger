@@ -1,0 +1,30 @@
+{
+    "0": {
+        "name": "MOD",
+        "nets": ["DAC_MOD", "NET00045", "NET00103", "V_ZATV_MOD"]
+    },
+    "1": {
+        "name": "VP11",
+        "nets": ["DAC_VP11", "NET00046", "NET00104", "V_ZATV_VP11"]
+    },
+    "2": {
+        "name": "VP12",
+        "nets": ["DAC_VP12", "NET00047", "NET00106", "V_ZATV_VP12"]
+    },
+    "3": {
+        "name": "VP13",
+        "nets": ["DAC_VP13", "NET00048", "NET00107", "V_ZATV_VP13"]
+    },
+    "4": {
+        "name": "VP21",
+        "nets": ["DAC_VP21", "NET00049", "NET00024", "V_ZATV_VP21"]
+    },
+    "5": {
+        "name": "VP22",
+        "nets": ["DAC_VP22", "NET00051", "NET00025", "V_ZATV_VP22"]
+    },
+    "6": {
+        "name": "VP23",
+        "nets": ["DAC_VP23", "NET00052", "NET00105", "V_ZATV_VP23"]
+    }
+}

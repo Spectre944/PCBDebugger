@@ -498,11 +498,143 @@
       },
       "options": {
         "pass": {
-          "next": "00000000"
+          "next": "b87b6297"
         },
         "fail": {
           "next": "506bd709",
 		  "pause" : true
+        }
+      }
+    },
+	{
+      "general": {
+        "id": "b87b6297",
+        "title": "8.1 Перевірка ЦАП | ALL == 0.0",
+        "description": "Відпраляємо команду `$D 0.0 0.0 0.0 0.0 0.0 0.0 0.0*` -> RS"
+      },
+      "nets": [],
+      "testing": {
+        "mode": "auto",
+        "kind": "send_signal",
+        "send": "$D 0.0 0.0 0.0 0.0 0.0 0.0 0.0*",
+        "source": "RS"
+      },
+      "options": {
+        "pass": {
+          "next": "b9b6c209"
+        },
+        "fail": {
+          "next": "b87b6297",
+          "pause": true
+        }
+      }
+    },
+    {
+      "general": {
+        "id": "b9b6c209",
+        "title": "8.1: Перевірка нульових рівнів | ALL == 0.0",
+        "description": "$DAC VAL* -> BT, всі канали +0.00 ± 0.10"
+      },
+      "nets": [],
+      "testing": {
+        "mode": "auto",
+        "kind": "analog_check",
+        "send": "$DAC VAL*",
+        "source": "BT",
+        "value": 0.0,
+        "delta": 0.1,
+        "channels": 7,
+        "timeout_ms": 2000
+      },
+      "options": {
+        "pass": {
+          "next": "eca66c8c"
+        },
+        "fail": {
+          "next": "b9b6c209",
+          "pause": true
+        }
+      }
+    },
+    {
+      "general": {
+        "id": "eca66c8c",
+		"title": "8.2: Перевірка ЦАП | ALL = 4.9 (усі канали)",
+        "description": "Відпраляємо команду: `$D 4.9 4.9 4.9 4.9 4.9 4.9 4.9*` -> RS"
+      },
+      "nets": [],
+      "testing": {
+        "mode": "auto",
+        "kind": "send_signal",
+        "send": "$D 4.9 4.9 4.9 4.9 4.9 4.9 4.9*",
+        "source": "RS"
+      },
+      "options": {
+        "pass": {
+          "next": "6fd79a1e"
+        },
+        "fail": {
+          "next": "eca66c8c",
+          "pause": true
+        }
+      }
+    },
+    {
+      "general": {
+        "id": "6fd79a1e",
+        "title": "8.2: Перевірка високих рівнів",
+        "description": "8.2: $DAC VAL* -> BT, всі канали -4.95 ± 0.25"
+      },
+      "nets": [],
+      "testing": {
+        "mode": "auto",
+        "kind": "analog_check",
+        "send": "$DAC VAL*",
+        "source": "BT",
+        "value": -4.95,
+        "delta": 0.25,
+        "channels": 7,
+        "timeout_ms": 2000
+      },
+      "options": {
+        "pass": {
+          "next": "36e6af6d"
+        },
+        "fail": {
+          "next": "6fd79a1e",
+          "pause": true
+        }
+      }
+    },
+    {
+      "general": {
+        "id": "36e6af6d",
+        "title": "8.3: поканальний обхід ЦАП",
+        "description": "8.3: для кожного каналу — високий рівень на ньому, низький на решті"
+      },
+      "nets": [],
+      "testing": {
+        "mode": "auto",
+        "kind": "analog_sweep",
+        "set_port": "RS",
+        "read_port": "BT",
+        "read_send": "$DAC VAL*",
+        "channels": 7,
+        "send_target_value": 4.9,
+        "send_other_value": 0,
+        "expected_target_value": -4.95,
+        "expected_target_delta": 0.25,
+        "expected_other_value": 0,
+        "expected_other_delta": 0.1,
+        "timeout_ms": 2000
+      },
+      "options": {
+        "pass": {
+          "next": "00000000"
+        },
+        "fail": {
+          "next": "36e6af6d",
+          "pause": true
         }
       }
     },

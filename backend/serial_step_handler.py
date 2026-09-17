@@ -96,6 +96,48 @@ class PinSweepState:
         return self.bad_pins | self.timeout_pins
 
 
+@dataclass
+class AnalogSweepState:
+    """
+    Состояние последовательной проверки индивидуальных каналов ЦАП (п.8.3).
+
+    В отличие от PinSweepState (где на каждой итерации меняется ОДНА
+    короткая команда $PIN Px), тут нельзя выставить один канал отдельно —
+    команда $D всегда содержит ВЕСЬ вектор из N чисел, поэтому на каждой
+    итерации пересобирается заново.
+    """
+
+    channels: int
+    set_port: str
+    read_port: str
+    read_send: str
+    send_target_value: float
+    send_other_value: float
+    expected_target_value: float
+    expected_target_delta: float
+    expected_other_value: float
+    expected_other_delta: float
+    timeout_ms: int
+
+    remaining: list[int] = field(init=False)
+    bad_channels: set[int] = field(default_factory=set)
+    timeout_channels: set[int] = field(default_factory=set)
+    # Той самий підхід, що mismatch_details у PinSweepState — лише ПЕРШИЙ
+    # випадок кожного каналу, для підсумкової таблиці в кінці обходу.
+    mismatch_details: dict[int, tuple[float, float, float]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.remaining = list(range(self.channels))
+
+    @property
+    def completed(self) -> bool:
+        return not self.remaining
+
+    @property
+    def failed_channels(self) -> set[int]:
+        return self.bad_channels | self.timeout_channels
+
+
 def build_match_fn(expect: str) -> Callable[[bytes], bytes | None]:
     """
     Создаёт функцию поиска конкретного кадра в буфере.
@@ -206,6 +248,91 @@ def get_nets_for_pins(
     return nets
 
 
+_FLOAT_RE = re.compile(r"-?\d+\.\d+")
+
+
+def parse_analog_frame(raw: bytes) -> list[float]:
+    """
+    Разбирает кадр:
+
+        $D 0.01 -0.01 0.00 0.10 0.05 -0.02 0.03*
+
+    в:
+
+        [0.01, -0.01, 0.00, 0.10, 0.05, -0.02, 0.03]
+
+    ВАЖНО: в отличие от $PORT (именованные пары "Pn=v"), тут у каналов
+    нет собственных имён в самом кадре — индекс канала определяется
+    ТОЛЬКО порядком чисел слева направо, как описано в методике
+    (канал 0 — первое число, канал 1 — второе, и т.д.). Если плата
+    когда-нибудь начнёт присылать их в другом порядке — этот парсер
+    сломается молча (даст неверные номера каналов), это стоит иметь
+    в виду.
+    """
+
+    text = raw.decode(errors="ignore")
+
+    return [float(match) for match in _FLOAT_RE.findall(text)]
+
+
+def get_nets_for_channels(
+    channel_indices,
+    channel_map: dict,
+) -> list[str]:
+    """Преобразует индексы DAC-каналов в имена связанных net (может быть несколько на канал)."""
+
+    nets: list[str] = []
+
+    for channel in channel_indices:
+        info = channel_map.get(str(channel), {})
+        nets.extend(info.get("nets", []))
+
+    return nets
+
+
+def build_analog_report_table(
+    channel_map: dict,
+    bad_channels: dict[int, tuple[float, float, float]],
+    timeout_channels=(),
+) -> str:
+    """
+    bad_channels: {канал: (очікувано, delta, факт)}. Той самий підхід,
+    що build_pin_report_table — таблиця замість довгого рядка через кому.
+    timeout_channels: канали, на яких відповіді не було взагалі.
+    """
+
+    if not bad_channels and not timeout_channels:
+        return ""
+
+    rows_html = []
+    for channel in sorted(bad_channels):
+        expected, delta, actual = bad_channels[channel]
+        info = channel_map.get(str(channel), {})
+        name = info.get("name", f"CH{channel}")
+        nets = ", ".join(info.get("nets", [])) or "-"
+        rows_html.append(
+            f"<tr><td>{channel}</td><td>{name}</td><td>невірне значення</td>"
+            f"<td>{expected:+.2f} ± {delta:.2f}</td>"
+            f"<td>{actual:+.2f}</td><td>{nets}</td></tr>"
+        )
+    for channel in sorted(timeout_channels):
+        info = channel_map.get(str(channel), {})
+        name = info.get("name", f"CH{channel}")
+        nets = ", ".join(info.get("nets", [])) or "-"
+        rows_html.append(
+            f"<tr><td>{channel}</td><td>{name}</td><td>немає відповіді</td>"
+            f"<td>—</td><td>—</td><td>{nets}</td></tr>"
+        )
+
+    return (
+        '<table border="1" cellspacing="0" cellpadding="4" '
+        'style="border-collapse:collapse; font-family:Consolas,monospace; font-size:12px;">'
+        "<tr><th>Канал</th><th>Назва</th><th>Проблема</th><th>Очікувано</th><th>Факт</th><th>Nets</th></tr>"
+        + "".join(rows_html)
+        + "</table>"
+    )
+
+
 class SerialStepHandler(QObject):
     """
     Связывает ScenarioRunner с SerialManager.
@@ -238,6 +365,7 @@ class SerialStepHandler(QObject):
         self.model = model
 
         self.pin_to_net = self._load_pin_map()
+        self.channel_map = self._load_channel_map()
 
         # Параметры текущего ожидаемого ответа.
         self._active_port: str | None = None
@@ -262,6 +390,30 @@ class SerialStepHandler(QObject):
         try:
             with open(
                 "config\\d1_net_map.json",
+                encoding="utf-8",
+            ) as file:
+                data = json.load(file)
+
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        if not isinstance(data, dict):
+            return {}
+
+        return data
+
+    @staticmethod
+    def _load_channel_map() -> dict:
+        """
+        Загружает соответствие индекса DAC-канала (0-6) имени затвора и
+        связанным net. Отдельный файл от d1_net_map.json — это принципиально
+        другая система координат (индекс канала, а не номер вывода D1),
+        смешивать их в одну карту было бы путаницей.
+        """
+
+        try:
+            with open(
+                "config\\dac_channel_map.json",
                 encoding="utf-8",
             ) as file:
                 data = json.load(file)
@@ -300,6 +452,21 @@ class SerialStepHandler(QObject):
         self.runner.register_auto_handler(
             "pin_sweep",
             self._handle_pin_sweep,
+        )
+
+        self.runner.register_auto_handler(
+            "analog_check",
+            self._handle_analog_check,
+        )
+
+        self.runner.register_auto_handler(
+            "analog_check_single",
+            self._handle_analog_check_single,
+        )
+
+        self.runner.register_auto_handler(
+            "analog_sweep",
+            self._handle_analog_sweep,
         )
 
     def _connect_signals(self) -> None:
@@ -485,6 +652,448 @@ class SerialStepHandler(QObject):
             match_fn,
             timeout_ms,
         )
+
+    # ------------------------------------------------------------------
+    # Проверка аналоговых каналов ЦАП (п.8 методики)
+    # ------------------------------------------------------------------
+
+    def _handle_analog_check(self, index: int) -> None:
+        """
+        Групповая проверка: ВСЕ каналы должны быть в диапазоне
+        value ± delta (п.8.1 "все нули", п.8.2 "все высокие").
+
+        Формат testing в scenario.json:
+            "testing": {
+                "mode": "auto",
+                "kind": "analog_check",
+                "send": "$DAC VAL*",
+                "source": "BT",
+                "value": 0.0,
+                "delta": 0.10,
+                "channels": 7,
+                "timeout_ms": 2000
+            }
+        """
+
+        testing = self.model.get_testing(index)
+
+        port_key = testing.get("source", "")
+        send = testing.get("send", "")
+        value = float(testing.get("value", 0.0))
+        delta = float(testing.get("delta", 0.1))
+        channels = int(testing.get("channels", 7))
+
+        timeout_ms = testing.get(
+            "timeout_ms",
+            DEFAULT_TIMEOUT_MS,
+        )
+
+        if not port_key or not send:
+            self.runner.report_result("fail")
+            return
+
+        expected_per_channel = [(value, delta)] * channels
+
+        # ВАЖЛИВО: префікс саме "$D " (з пробілом), а НЕ "$D" — інакше
+        # структурний matcher міг би спрацювати на самій команді запиту
+        # "$DAC VAL*" (яка теж починається з "$D", але без пробілу після
+        # нього), якщо вона раптом опиниться в тому ж буфері (наприклад,
+        # через ехо на шині). Пробіл після "$D" є в реальній відповіді
+        # "$D 0.01 -0.01 ...*" і відсутній у "$DAC" — цього достатньо,
+        # щоб їх не сплутати.
+        match_fn = build_frame_match_fn("$D ")
+
+        self._set_active_request(
+            port_key=port_key,
+            success=lambda raw: self._verify_analog_frame(
+                raw,
+                expected_per_channel,
+            ),
+            failure=lambda reason: self._analog_check_timeout(
+                reason,
+                send,
+                port_key,
+            ),
+        )
+
+        self.serial.send_and_wait(
+            port_key,
+            send.encode(),
+            match_fn,
+            timeout_ms,
+        )
+
+    def _handle_analog_check_single(self, index: int) -> None:
+        """
+        Один канал должен отличаться от остальных (п.8.3): целевой канал
+        в диапазоне target_value ± target_delta, все прочие — в диапазоне
+        other_value ± other_delta.
+
+        Формат testing в scenario.json:
+            "testing": {
+                "mode": "auto",
+                "kind": "analog_check_single",
+                "send": "$DAC VAL*",
+                "source": "BT",
+                "target_channel": 0,
+                "target_value": -4.90,
+                "target_delta": 0.30,
+                "other_value": 0.0,
+                "other_delta": 0.10,
+                "channels": 7,
+                "timeout_ms": 2000
+            }
+
+        Якщо треба перевірити всі 7 каналів по черзі (як для 8.3
+        передбачає повторення "так перевіряємо кожен канал") — на відміну
+        від 19 пінів у pin_sweep, тут лише 7 каналів, тож простіше
+        просто виписати 7 окремих кроків scenario.json з різним
+        target_channel, ніж городити ще один sweep-механізм. Скажіть,
+        якщо всё ж хочете analog_sweep за зразком pin_sweep — додам.
+        """
+
+        testing = self.model.get_testing(index)
+
+        port_key = testing.get("source", "")
+        send = testing.get("send", "")
+        target_channel = int(testing.get("target_channel", 0))
+        target_value = float(testing.get("target_value", 0.0))
+        target_delta = float(testing.get("target_delta", 0.1))
+        other_value = float(testing.get("other_value", 0.0))
+        other_delta = float(testing.get("other_delta", 0.1))
+        channels = int(testing.get("channels", 7))
+
+        timeout_ms = testing.get(
+            "timeout_ms",
+            DEFAULT_TIMEOUT_MS,
+        )
+
+        if not port_key or not send:
+            self.runner.report_result("fail")
+            return
+
+        expected_per_channel = [
+            (target_value, target_delta)
+            if channel == target_channel
+            else (other_value, other_delta)
+            for channel in range(channels)
+        ]
+
+        match_fn = build_frame_match_fn("$D ")
+
+        self._set_active_request(
+            port_key=port_key,
+            success=lambda raw: self._verify_analog_frame(
+                raw,
+                expected_per_channel,
+            ),
+            failure=lambda reason: self._analog_check_timeout(
+                reason,
+                send,
+                port_key,
+            ),
+        )
+
+        self.serial.send_and_wait(
+            port_key,
+            send.encode(),
+            match_fn,
+            timeout_ms,
+        )
+
+    def _analog_check_timeout(
+        self,
+        reason: str,
+        send: str,
+        port_key: str,
+    ) -> None:
+        """Обрабатывает отсутствие ответа при проверке ЦАП."""
+
+        self.runner.log_detail(
+            f"ANALOG_CHECK: немає відповіді на '{send}' "
+            f"з порту '{port_key}' (timeout, {reason})"
+        )
+
+        self.runner.report_result("fail")
+
+    def _verify_analog_frame(
+        self,
+        raw: bytes,
+        expected_per_channel: list[tuple[float, float]],
+    ) -> None:
+        """Проверяет значения каналов в полученном $D-кадре."""
+
+        actual = parse_analog_frame(raw)
+
+        if len(actual) != len(expected_per_channel):
+            # Кадр прийшов, але кількість чисел у ньому не збігається з
+            # очікуваною — це відмінна від "значення не в діапазоні"
+            # несправність (кадр побитий/неповний/формат змінився), тому
+            # повідомляємо про це окремо, а не намагаємось звірити
+            # порізнобитні дані.
+            self.runner.log_detail(
+                f"ANALOG_CHECK: неочікувана кількість каналів у відповіді "
+                f"({len(actual)} замість {len(expected_per_channel)}) — "
+                f"сирі дані: {actual}"
+            )
+            self.runner.report_result("fail")
+            return
+
+        bad_channels: dict[int, tuple[float, float, float]] = {}
+
+        for channel, (actual_value, (expected_value, delta)) in enumerate(
+            zip(actual, expected_per_channel)
+        ):
+            if abs(actual_value - expected_value) > delta:
+                bad_channels[channel] = (expected_value, delta, actual_value)
+
+        if not bad_channels:
+            self.runner.report_result("pass")
+            return
+
+        self.runner.log_detail(
+            f"ANALOG_CHECK: розбіжність ({len(bad_channels)} з {len(expected_per_channel)} каналів)"
+        )
+        self.runner.log_detail(
+            build_analog_report_table(self.channel_map, bad_channels)
+        )
+
+        bad_nets = get_nets_for_channels(bad_channels.keys(), self.channel_map)
+
+        if bad_nets:
+            self.select_bad_nets.emit(bad_nets)
+
+        self.runner.report_result("fail")
+
+    def _handle_analog_sweep(self, index: int) -> None:
+        """
+        Проверяет КАЖДЫЙ канал ЦАП по очереди (п.8.3): для канала i
+        отправляется ПОЛНЫЙ пакет "$D ..." со высоким значением именно на
+        i-м месте и низким на остальных, затем считывается и сверяется
+        ответ. Аналог pin_sweep, но т.к. отдельной команды на один канал
+        не существует (в отличие от $PIN Px) — на каждой итерации
+        пересобирается весь вектор из N чисел заново.
+
+        Формат testing в scenario.json:
+            "testing": {
+                "mode": "auto",
+                "kind": "analog_sweep",
+                "set_port": "RS",
+                "read_port": "BT",
+                "read_send": "$DAC VAL*",
+                "channels": 7,
+                "send_target_value": 4.9,
+                "send_other_value": 0.0,
+                "expected_target_value": -4.90,
+                "expected_target_delta": 0.30,
+                "expected_other_value": 0.0,
+                "expected_other_delta": 0.10,
+                "timeout_ms": 2000
+            }
+        """
+
+        testing = self.model.get_testing(index)
+
+        channels = int(testing.get("channels", 7))
+        set_port = testing.get("set_port", "")
+        read_port = testing.get("read_port", "")
+        read_send = testing.get("read_send", "$DAC VAL*")
+
+        timeout_ms = int(
+            testing.get(
+                "timeout_ms",
+                DEFAULT_TIMEOUT_MS,
+            )
+        )
+
+        if not set_port or not read_port:
+            self.runner.report_result("fail")
+            return
+
+        state = AnalogSweepState(
+            channels=channels,
+            set_port=set_port,
+            read_port=read_port,
+            read_send=read_send,
+            send_target_value=float(testing.get("send_target_value", 4.9)),
+            send_other_value=float(testing.get("send_other_value", 0.0)),
+            expected_target_value=float(testing.get("expected_target_value", -4.9)),
+            expected_target_delta=float(testing.get("expected_target_delta", 0.3)),
+            expected_other_value=float(testing.get("expected_other_value", 0.0)),
+            expected_other_delta=float(testing.get("expected_other_delta", 0.1)),
+            timeout_ms=timeout_ms,
+        )
+
+        self.runner.log_detail(
+            f"ANALOG_SWEEP: перевірка {state.channels} каналів"
+        )
+
+        self._advance_analog_sweep(state)
+
+    def _advance_analog_sweep(
+        self,
+        state: AnalogSweepState,
+    ) -> None:
+        """Переходит к проверке следующего канала ЦАП."""
+
+        if state.completed:
+            self._finish_analog_sweep(state)
+            return
+
+        channel = state.remaining.pop(0)
+
+        values = [
+            state.send_target_value
+            if current_channel == channel
+            else state.send_other_value
+            for current_channel in range(state.channels)
+        ]
+        command = "$D " + " ".join(f"{value:.1f}" for value in values) + "*"
+
+        self._current_set_port = state.set_port
+
+        if not self.serial.send_signal(
+            state.set_port,
+            command.encode(),
+        ):
+            self.runner.log_detail(
+                f"ANALOG_SWEEP: не вдалося відправити "
+                f"команду для каналу {channel}; "
+                f"порт '{state.set_port}' недоступний"
+            )
+
+            self.runner.report_result("fail")
+            return
+
+        expected_per_channel = [
+            (state.expected_target_value, state.expected_target_delta)
+            if current_channel == channel
+            else (state.expected_other_value, state.expected_other_delta)
+            for current_channel in range(state.channels)
+        ]
+
+        match_fn = build_frame_match_fn("$D ")
+
+        self._set_active_request(
+            port_key=state.read_port,
+            success=lambda raw: self._handle_analog_success(
+                raw,
+                channel,
+                expected_per_channel,
+                state,
+            ),
+            failure=lambda reason: self._handle_analog_failure(
+                reason,
+                channel,
+                state,
+            ),
+        )
+
+        self.serial.send_and_wait(
+            state.read_port,
+            state.read_send.encode(),
+            match_fn,
+            state.timeout_ms,
+        )
+
+    def _handle_analog_success(
+        self,
+        raw: bytes,
+        channel: int,
+        expected_per_channel: list[tuple[float, float]],
+        state: AnalogSweepState,
+    ) -> None:
+        """Обрабатывает ответ на проверку одного канала ЦАП."""
+
+        actual = parse_analog_frame(raw)
+
+        if len(actual) != len(expected_per_channel):
+            # Побитий/неповний кадр — це інша несправність, ніж "значення
+            # не в діапазоні". Рахуємо канал поганим і йдемо далі, а не
+            # рвемо весь обхід через один поганий кадр.
+            self.runner.log_detail(
+                f"ANALOG_SWEEP: ціль CH{channel} — неочікувана кількість "
+                f"чисел у відповіді ({len(actual)} замість "
+                f"{len(expected_per_channel)})"
+            )
+            state.bad_channels.add(channel)
+            self._advance_analog_sweep(state)
+            return
+
+        mismatches = {
+            current_channel: (expected_value, delta, actual_value)
+            for current_channel, (actual_value, (expected_value, delta)) in enumerate(
+                zip(actual, expected_per_channel)
+            )
+            if abs(actual_value - expected_value) > delta
+        }
+
+        if mismatches:
+            state.bad_channels.update(mismatches)
+            for current_channel, triple in mismatches.items():
+                # Той самий підхід, що й pin_sweep — тримаємо лише ПЕРШИЙ
+                # випадок кожного каналу для підсумкової таблиці, а не
+                # дублюємо повний список на кожній ітерації.
+                state.mismatch_details.setdefault(current_channel, triple)
+
+            self.runner.log_detail(
+                f"ANALOG_SWEEP: ціль CH{channel} — "
+                f"розбіжність ({len(mismatches)} каналів, деталі в підсумку)"
+            )
+
+        self._advance_analog_sweep(state)
+
+    def _handle_analog_failure(
+        self,
+        reason: str,
+        channel: int,
+        state: AnalogSweepState,
+    ) -> None:
+        """Обрабатывает отсутствие ответа на проверку канала ЦАП."""
+
+        state.timeout_channels.add(channel)
+
+        self.runner.log_detail(
+            f"ANALOG_SWEEP: ціль CH{channel} — "
+            f"немає відповіді від плати (timeout, {reason})"
+        )
+
+        self._advance_analog_sweep(state)
+
+    def _finish_analog_sweep(
+        self,
+        state: AnalogSweepState,
+    ) -> None:
+        """Завершает проверку всех каналов ЦАП."""
+
+        failed_channels = state.failed_channels
+
+        self._current_set_port = None
+
+        if not failed_channels:
+            self.runner.log_detail(
+                f"ANALOG_SWEEP: усі {state.channels} каналів пройшли перевірку"
+            )
+            self.runner.report_result("pass")
+            return
+
+        self.runner.log_detail(
+            f"ANALOG_SWEEP: проблемні канали ({len(failed_channels)} з {state.channels})"
+        )
+        self.runner.log_detail(
+            build_analog_report_table(
+                self.channel_map,
+                state.mismatch_details,
+                state.timeout_channels,
+            )
+        )
+
+        bad_nets = get_nets_for_channels(failed_channels, self.channel_map)
+
+        if bad_nets:
+            self.select_bad_nets.emit(bad_nets)
+
+        self.runner.report_result("fail")
 
     # ------------------------------------------------------------------
     # Последовательная проверка PIN
