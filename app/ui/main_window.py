@@ -5,6 +5,7 @@ from app.ui.widgets.tree_widget import TreeModel, TreeWidget
 from app.ui.pages.main_page import Ui_mainPage
 from app.ui.pages.main_window import Ui_MainWindow
 from app.ui.pages.settings_page import Ui_settingsPage
+from app.ui.pages.settings_page_controller import PortSettingsWidget
 
 from backend.kicad_api import KiCadApi
 from backend.session import DiagnosticSession
@@ -48,9 +49,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.ui_main_page.setupUi(self.main_page_widget)
 
         # Создаем страницу для настроек
-        self.settings_page_widget = QWidget()
-        self.ui_settings_page = Ui_settingsPage()
-        self.ui_settings_page.setupUi(self.settings_page_widget)
+        self.settings_page_widget = PortSettingsWidget()
 
         # Создаем стек и добавляем страницу
         self.stackWidget = QStackedWidget()
@@ -66,8 +65,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.runner = ScenarioRunner(self.model, self.kicad)
         self.serial = SerialManager()
 
-        self.serial.add_port("RS","COM20", baud_rate=19200)
-        self.serial.add_port("BT","COM21", baud_rate=19200)
+        # Подключаем сигналы страницы настроек к слотам MainWindow
+        self.settings_page_widget.port_connect_requested.connect(self.on_port_connect_requested)
+        self.settings_page_widget.port_disconnect_requested.connect(self.on_port_disconnect_requested)
+
+        # Реагируем на фактические изменения состояния портов в SerialManager
+        self.serial.port_connected.connect(self.on_port_connected)
+        self.serial.port_disconnected.connect(self.on_port_disconnected)
+        self.serial.port_error.connect(self.on_port_error)
+
+        # self.serial.add_port("RS","COM20", baud_rate=19200)
+        # self.serial.add_port("BT","COM21", baud_rate=19200)
 
         # Сохранения и загрузка сессии диагностики
         self.session = DiagnosticSession(self.model)
@@ -198,6 +206,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_debug_nextStep.triggered.connect(self.debug_next_step)
         self.action_debug_stop.triggered.connect(self.debug_stop)
         self.action_debug_restart.triggered.connect(self.debug_restart)
+        self.action_mainPage.triggered.connect( lambda: self.stackWidget.setCurrentIndex(0) )
+        self.action_settingsPage.triggered.connect( lambda: self.stackWidget.setCurrentIndex(1) )
+
 
     # --- ЛКМ: выделить сети без зума ---
     def on_click(self, index: QModelIndex):
@@ -364,3 +375,56 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def show_connection_error(self, title: str, message: str) -> None:
         QMessageBox.critical(self, title, message)
+
+    # ------------------------------------------------------------------ #
+    #  Слоты страницы настроек портов
+    # ------------------------------------------------------------------ #
+
+    def on_port_connect_requested(self, port_key, port_name, baudrate,
+                                stop_bit, parity, flow_control):
+        """Запрос на подключение порта со страницы настроек."""
+        try:
+            # Если порт уже добавлен — обновим параметры, иначе добавим
+            if port_key in self.serial.ports:
+                self.serial.remove_port(port_key)
+
+            self.serial.add_port(
+                port_key,
+                port_name,
+                baud_rate=baudrate,
+                stop_bits=stop_bit,
+                parity=parity,
+                flow_control=flow_control,
+            )
+            self.serial.connect_port(port_key)
+        except Exception as e:
+            self.settings_page_widget.show_error(
+                "Помилка підключення",
+                f"Не вдалося відкрити {port_key} ({port_name}):\n{e}"
+            )
+
+    def on_port_disconnect_requested(self, port_key: str):
+        """Запрос на отключение порта."""
+        try:
+            self.serial.disconnect_port(port_key)
+        except Exception as e:
+            self.settings_page_widget.show_error(
+                "Помилка відключення",
+                f"Не вдалося закрити {port_key}:\n{e}"
+            )
+
+    def on_port_connected(self, port_key: str):
+        """SerialManager подтвердил подключение."""
+        self.settings_page_widget.set_connected(port_key, True)
+        self.append_log(f"Порт {port_key} підключено.")
+
+    def on_port_disconnected(self, port_key: str):
+        """SerialManager подтвердил отключение."""
+        self.settings_page_widget.set_connected(port_key, False)
+        self.append_log(f"Порт {port_key} відключено.")
+
+    def on_port_error(self, port_key: str, message: str):
+        """SerialManager сообщил об ошибке."""
+        self.settings_page_widget.set_connected(port_key, False)
+        self.settings_page_widget.show_error("Помилка порту", f"{port_key}: {message}")
+        self.append_log(f"Помилка порту {port_key}: {message}")

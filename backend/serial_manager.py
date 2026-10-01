@@ -42,6 +42,8 @@ class SerialManager(QObject):
     request_failed = Signal(str, str)
     port_error = Signal(str, str)
     raw_data_received = Signal(str, bytes)
+    port_connected = Signal(str)      # port_key
+    port_disconnected = Signal(str)   # port_key
 
     def __init__(self, parent=None):
         super().__init__(parent)
