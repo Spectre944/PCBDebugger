@@ -1,7 +1,9 @@
 # app/ui/pages/settings_page_controller.py
 # -*- coding: utf-8 -*-
 
-from PySide6.QtWidgets import QWidget, QMessageBox
+import os
+
+from PySide6.QtWidgets import QWidget, QMessageBox, QFileDialog
 from PySide6.QtCore import Signal, Qt
 
 from app.ui.pages.settings_page import Ui_settingsPage
@@ -25,6 +27,9 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
     port_disconnect_requested = Signal(str)
     # port_key: любой параметр порта изменён пользователем (для сохранения)
     params_changed = Signal(str)
+    # Пути KiCad выбраны пользователем через файловый диалог
+    kicad_path_changed = Signal(str)
+    project_path_changed = Signal(str)
 
     # Состояния порта
     STATE_DISCONNECTED = "disconnected"
@@ -81,6 +86,11 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
             ],
         }
 
+        self._kicad_path = ""
+        self._project_path = ""
+        self.set_kicad_path("")
+        self.set_project_path("")
+
         self._populate_comboboxes()
         self._connect_signals()
         self._set_extra_visible(self.PORT_BT, False)
@@ -133,6 +143,10 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
             lambda: self._toggle_extra(self.PORT_RS)
         )
 
+        # Выбор пути к KiCad и к проекту
+        self.pushButton_kicad_set_path.clicked.connect(self._choose_kicad_path)
+        self.pushButton_set_project_path.clicked.connect(self._choose_project_path)
+
         # Любое изменение параметров -> наружу (сохранение в settings.json)
         for port_key, widgets in self._param_widgets.items():
             for combo in widgets:
@@ -161,6 +175,38 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
         for w in self._extra_widgets[port_key]:
             w.setVisible(visible)
 
+    def _choose_kicad_path(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Виберіть виконуваний файл KiCAD (pcbnew)",
+            self._start_dir(self._kicad_path),
+            "Виконувані файли (*.exe);;Усі файли (*)",
+        )
+
+        if path:
+            path = os.path.normpath(path)
+            self.set_kicad_path(path)
+            self.kicad_path_changed.emit(path)
+
+    def _choose_project_path(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Виберіть файл проєкту KiCAD",
+            self._start_dir(self._project_path),
+            "Плата KiCAD (*.kicad_pcb);;Усі файли (*)",
+        )
+
+        if path:
+            path = os.path.normpath(path)
+            self.set_project_path(path)
+            self.project_path_changed.emit(path)
+
+    @staticmethod
+    def _start_dir(current_path: str) -> str:
+        """Папка, с которой открыть диалог: где лежит текущий файл."""
+        folder = os.path.dirname(current_path) if current_path else ""
+        return folder if os.path.isdir(folder) else ""
+
     def _on_connect_clicked(self, port_key: str):
         if self._state[port_key] == self.STATE_DISCONNECTED:
             self.port_connect_requested.emit(*self._collect_params(port_key))
@@ -183,6 +229,23 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
     # ------------------------------------------------------------------ #
     #  Публичный API
     # ------------------------------------------------------------------ #
+
+    def set_kicad_path(self, path: str):
+        """Показывает путь к KiCad (без сигналов)."""
+        self._kicad_path = path
+        self._show_path(self.label_12, "Шлях до KiCAD", path)
+
+    def set_project_path(self, path: str):
+        """Показывает путь к файлу проекта (без сигналов)."""
+        self._project_path = path
+        self._show_path(self.label_13, "Шлях до файлу проєкту", path)
+
+    @staticmethod
+    def _show_path(label, title: str, path: str):
+        label.setText(f"{title}: {path}" if path else f"{title}: не вибрано")
+        label.setToolTip(path)
+        # Длинный путь не должен растягивать страницу
+        label.setWordWrap(True)
 
     def get_params(self, port_key: str) -> dict:
         """Текущие значения полей порта (для сохранения в settings.json)."""

@@ -14,6 +14,11 @@ DEFAULT_PORT_SETTINGS = {
     "auto_connect": False,   # reconnect to this port on the next program start
 }
 
+DEFAULT_KICAD_SETTINGS = {
+    "executable_path": r"E:\Prog\KiCAD\bin\pcbnew.exe",
+    "project_path": r"files\1.kicad_pcb",
+}
+
 # Значения по умолчанию для конкретных портов (перекрывают общие)
 PORT_DEFAULTS = {
     "RS": {"port_name": "COM20"},
@@ -33,6 +38,10 @@ class AppSettings:
                    "parity": "None", "flow_control": "None",
                    "auto_connect": true},
             "RS": {...}
+          },
+          "kicad": {
+            "executable_path": "E:\\Prog\\KiCAD\\bin\\pcbnew.exe",
+            "project_path": "files\\1.kicad_pcb"
           }
         }
 
@@ -143,4 +152,37 @@ class AppSettings:
         except OSError:
             # Нет прав на запись и т.п.: настройки просто не сохранятся,
             # программа при этом продолжает работать.
+            pass
+
+    # -------------------------------------------------------------------------
+    # KiCad
+    # -------------------------------------------------------------------------
+
+    def get_kicad(self) -> dict:
+        """Return KiCad paths (executable_path, project_path)."""
+
+        result = deepcopy(DEFAULT_KICAD_SETTINGS)
+        saved = self._data.get("kicad")
+
+        if isinstance(saved, dict):
+            for key in result:
+                if isinstance(saved.get(key), str):
+                    result[key] = saved[key]
+
+        return result
+
+    def update_kicad(self, **values) -> None:
+        """Change KiCad paths and save the file."""
+
+        kicad = self.get_kicad()
+
+        for key, value in values.items():
+            if key in kicad:
+                kicad[key] = str(value)
+
+        self._data["kicad"] = kicad
+
+        try:
+            self.save()
+        except OSError:
             pass

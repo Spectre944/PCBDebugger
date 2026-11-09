@@ -16,5 +16,9 @@
       "flow_control": "None",
       "auto_connect": false
     }
+  },
+  "kicad": {
+    "executable_path": "C:\\Program Files\\KiCad\\10.0\\bin\\pcbnew.exe",
+    "project_path": "D:\\Projects\\VS\\PCBDebugger\\files\\1.kicad_pcb"
   }
 }

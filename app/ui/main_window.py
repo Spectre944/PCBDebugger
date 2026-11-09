@@ -1,4 +1,5 @@
 from enum import Enum
+import os
 import subprocess
 
 from app.ui.widgets.board_widget import BoardWidget
@@ -39,17 +40,30 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.resize(1280, 460)
         self.setStyleSheet("QMainWindow { background:#0e1120; }")
 
-        # Запускаем KiCad и сохраняем процесс
-        self.kicad_process = subprocess.Popen([
-            r"E:\Prog\KiCAD\bin\pcbnew.exe",
-            r"files\1.kicad_pcb",
-        ])
+        # Настройки (порты, пути к KiCad и проекту) — config/settings.json
+        self.app_settings = AppSettings("config\\settings.json")
+        self._user_connect_pending = set()  # порты, подключаемые кнопкой
 
-        self.kicad = KiCadApi(self, kicad_process=self.kicad_process)  # Popen от запуска KiCad
+        # Запускаем KiCad и сохраняем процесс (None, если запуск не удался)
+        self.kicad_process = None
+        kicad_start_error = self._start_kicad()
+
+        self.kicad = KiCadApi(self, kicad_process=self.kicad_process)
         self.kicad.connection_status_changed.connect(self.show_status_bar_msg)
         self.kicad.selected_nets_changed.connect(self.update_selected_nets)
         self.kicad.connection_error.connect(self.show_connection_error)
-        self.kicad.connect()
+
+        if kicad_start_error is None:
+            self.kicad.connect()
+        else:
+            # Без запущенного KiCad автоподключение бессмысленно (иначе будет
+            # ещё и вторая ошибка через 30 с). Окно покажем после инициализации.
+            QTimer.singleShot(
+                0,
+                lambda: self.show_connection_error(
+                    "KiCad не запущено", kicad_start_error
+                ),
+            )
 
 
         
@@ -87,9 +101,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # Порт ждёт возвращения (занят / отключён) — идут автоповторы
         self.serial.port_reconnecting.connect(self.on_port_reconnecting)
 
-        # Параметры портов хранятся в config/settings.json
-        self.app_settings = AppSettings("config\\settings.json")
-        self._user_connect_pending = set()  # порты, подключаемые кнопкой
+        # Параметры портов и пути KiCad из config/settings.json
+        kicad_settings = self.app_settings.get_kicad()
+        self.settings_page_widget.set_kicad_path(kicad_settings["executable_path"])
+        self.settings_page_widget.set_project_path(kicad_settings["project_path"])
+        self.settings_page_widget.kicad_path_changed.connect(self.on_kicad_path_changed)
+        self.settings_page_widget.project_path_changed.connect(self.on_project_path_changed)
 
         self.settings_page_widget.params_changed.connect(self.on_port_params_changed)
 
@@ -401,6 +418,56 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     # ------------------------------------------------------------------ #
     #  Слоты страницы настроек портов
     # ------------------------------------------------------------------ #
+
+    # ------------------------------------------------------------------ #
+    #  Запуск KiCad
+    # ------------------------------------------------------------------ #
+
+    def _start_kicad(self) -> str | None:
+        """
+        Запускает KiCad с проектом из настроек.
+
+        Returns:
+            None при успехе, иначе текст ошибки для пользователя.
+        """
+        kicad = self.app_settings.get_kicad()
+        exe_path = kicad["executable_path"]
+        project_path = kicad["project_path"]
+
+        if not exe_path or not os.path.isfile(exe_path):
+            return (
+                f"Не знайдено виконуваний файл KiCAD:\n{exe_path or '(шлях не вказано)'}\n\n"
+                "Вкажіть шлях у Налаштування → Налаштування KiCAD."
+            )
+
+        command = [exe_path]
+
+        if project_path:
+            if os.path.isfile(project_path):
+                command.append(project_path)
+            else:
+                return (
+                    f"Не знайдено файл проєкту:\n{project_path}\n\n"
+                    "Вкажіть шлях у Налаштування → Налаштування KiCAD."
+                )
+
+        try:
+            self.kicad_process = subprocess.Popen(command)
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            # OSError: файл не запускается (WinError 193), нет прав / нужен
+            # запуск от администратора (WinError 740), антивирус и т.п.
+            self.kicad_process = None
+            return f"Не вдалося запустити KiCAD:\n{exe_path}\n\nДеталі: {e}"
+
+        return None
+
+    def on_kicad_path_changed(self, path: str):
+        self.app_settings.update_kicad(executable_path=path)
+        self.show_status_bar_msg("Шлях до KiCAD збережено. Діє після перезапуску програми.")
+
+    def on_project_path_changed(self, path: str):
+        self.app_settings.update_kicad(project_path=path)
+        self.show_status_bar_msg("Шлях до проєкту збережено. Діє після перезапуску програми.")
 
     def _auto_connect_ports(self):
         """Подключает порты, которые были подключены при прошлом выходе."""

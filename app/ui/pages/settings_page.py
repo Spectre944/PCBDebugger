@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 ################################################################################
-## Form generated from reading UI file 'settingPagehpVGnO.ui'
+## Form generated from reading UI file 'settingPagepkXpHW.ui'
 ##
 ## Created by: Qt User Interface Compiler version 6.10.2
 ##
@@ -16,14 +16,14 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QGridLayout,
-    QLabel, QPushButton, QSizePolicy, QSpacerItem,
-    QVBoxLayout, QWidget)
+    QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+    QSpacerItem, QVBoxLayout, QWidget)
 
 class Ui_settingsPage(object):
     def setupUi(self, settingsPage):
         if not settingsPage.objectName():
             settingsPage.setObjectName(u"settingsPage")
-        settingsPage.resize(878, 1009)
+        settingsPage.resize(950, 754)
         self.verticalLayout = QVBoxLayout(settingsPage)
         self.verticalLayout.setSpacing(100)
         self.verticalLayout.setObjectName(u"verticalLayout")
@@ -51,6 +51,7 @@ class Ui_settingsPage(object):
         self.verticalLayout_3 = QVBoxLayout(self.frame_3)
         self.verticalLayout_3.setObjectName(u"verticalLayout_3")
         self.gridLayout = QGridLayout()
+        self.gridLayout.setSpacing(5)
         self.gridLayout.setObjectName(u"gridLayout")
         self.pushButton_bt_settings = QPushButton(self.frame_3)
         self.pushButton_bt_settings.setObjectName(u"pushButton_bt_settings")
@@ -129,6 +130,7 @@ class Ui_settingsPage(object):
         self.verticalLayout_3.addWidget(self.line)
 
         self.gridLayout_2 = QGridLayout()
+        self.gridLayout_2.setSpacing(5)
         self.gridLayout_2.setObjectName(u"gridLayout_2")
         self.pushButton_rs_settings = QPushButton(self.frame_3)
         self.pushButton_rs_settings.setObjectName(u"pushButton_rs_settings")
@@ -207,9 +209,86 @@ class Ui_settingsPage(object):
 
         self.frame_2 = QFrame(settingsPage)
         self.frame_2.setObjectName(u"frame_2")
-        self.frame_2.setMinimumSize(QSize(0, 200))
-        self.frame_2.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame_2.setMinimumSize(QSize(0, 0))
+        self.frame_2.setFrameShape(QFrame.Shape.NoFrame)
         self.frame_2.setFrameShadow(QFrame.Shadow.Raised)
+        self.verticalLayout_4 = QVBoxLayout(self.frame_2)
+        self.verticalLayout_4.setObjectName(u"verticalLayout_4")
+        self.label_11 = QLabel(self.frame_2)
+        self.label_11.setObjectName(u"label_11")
+        sizePolicy1 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        sizePolicy1.setHorizontalStretch(0)
+        sizePolicy1.setVerticalStretch(0)
+        sizePolicy1.setHeightForWidth(self.label_11.sizePolicy().hasHeightForWidth())
+        self.label_11.setSizePolicy(sizePolicy1)
+
+        self.verticalLayout_4.addWidget(self.label_11)
+
+        self.frame_4 = QFrame(self.frame_2)
+        self.frame_4.setObjectName(u"frame_4")
+        sizePolicy2 = QSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        sizePolicy2.setHorizontalStretch(0)
+        sizePolicy2.setVerticalStretch(0)
+        sizePolicy2.setHeightForWidth(self.frame_4.sizePolicy().hasHeightForWidth())
+        self.frame_4.setSizePolicy(sizePolicy2)
+        self.frame_4.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame_4.setFrameShadow(QFrame.Shadow.Raised)
+        self.verticalLayout_5 = QVBoxLayout(self.frame_4)
+        self.verticalLayout_5.setObjectName(u"verticalLayout_5")
+        self.horizontalLayout = QHBoxLayout()
+        self.horizontalLayout.setSpacing(5)
+        self.horizontalLayout.setObjectName(u"horizontalLayout")
+        self.label_12 = QLabel(self.frame_4)
+        self.label_12.setObjectName(u"label_12")
+        sizePolicy3 = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        sizePolicy3.setHorizontalStretch(0)
+        sizePolicy3.setVerticalStretch(0)
+        sizePolicy3.setHeightForWidth(self.label_12.sizePolicy().hasHeightForWidth())
+        self.label_12.setSizePolicy(sizePolicy3)
+
+        self.horizontalLayout.addWidget(self.label_12)
+
+        self.pushButton_kicad_set_path = QPushButton(self.frame_4)
+        self.pushButton_kicad_set_path.setObjectName(u"pushButton_kicad_set_path")
+        sizePolicy4 = QSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        sizePolicy4.setHorizontalStretch(0)
+        sizePolicy4.setVerticalStretch(0)
+        sizePolicy4.setHeightForWidth(self.pushButton_kicad_set_path.sizePolicy().hasHeightForWidth())
+        self.pushButton_kicad_set_path.setSizePolicy(sizePolicy4)
+
+        self.horizontalLayout.addWidget(self.pushButton_kicad_set_path)
+
+
+        self.verticalLayout_5.addLayout(self.horizontalLayout)
+
+        self.line_2 = QFrame(self.frame_4)
+        self.line_2.setObjectName(u"line_2")
+        self.line_2.setFrameShape(QFrame.Shape.HLine)
+        self.line_2.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.verticalLayout_5.addWidget(self.line_2)
+
+        self.horizontalLayout_2 = QHBoxLayout()
+        self.horizontalLayout_2.setSpacing(5)
+        self.horizontalLayout_2.setObjectName(u"horizontalLayout_2")
+        self.label_13 = QLabel(self.frame_4)
+        self.label_13.setObjectName(u"label_13")
+        sizePolicy3.setHeightForWidth(self.label_13.sizePolicy().hasHeightForWidth())
+        self.label_13.setSizePolicy(sizePolicy3)
+
+        self.horizontalLayout_2.addWidget(self.label_13)
+
+        self.pushButton_set_project_path = QPushButton(self.frame_4)
+        self.pushButton_set_project_path.setObjectName(u"pushButton_set_project_path")
+
+        self.horizontalLayout_2.addWidget(self.pushButton_set_project_path)
+
+
+        self.verticalLayout_5.addLayout(self.horizontalLayout_2)
+
+
+        self.verticalLayout_4.addWidget(self.frame_4)
+
 
         self.verticalLayout.addWidget(self.frame_2)
 
@@ -240,5 +319,10 @@ class Ui_settingsPage(object):
         self.label_9.setText(QCoreApplication.translate("settingsPage", u"Baudrate", None))
         self.pushButton_rs_connect.setText(QCoreApplication.translate("settingsPage", u"\u041f\u0456\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u0438\u0441\u044c", None))
         self.label_10.setText(QCoreApplication.translate("settingsPage", u"Flow Control", None))
+        self.label_11.setText(QCoreApplication.translate("settingsPage", u"\u041d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f KiCAD", None))
+        self.label_12.setText(QCoreApplication.translate("settingsPage", u"\u0428\u043b\u044f\u0445 \u0434\u043e KiCAD", None))
+        self.pushButton_kicad_set_path.setText(QCoreApplication.translate("settingsPage", u"\u0412\u0456\u0434\u043a\u0440\u0438\u0442\u0438", None))
+        self.label_13.setText(QCoreApplication.translate("settingsPage", u"\u0428\u043b\u044f\u0445 \u0434\u043e \u0444\u0430\u0439\u043b\u0443 \u043f\u0440\u043e\u0435\u043a\u0442\u0430", None))
+        self.pushButton_set_project_path.setText(QCoreApplication.translate("settingsPage", u"\u0412\u0456\u0434\u043a\u0440\u0438\u0442\u0438", None))
     # retranslateUi
 
