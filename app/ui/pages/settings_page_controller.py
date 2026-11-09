@@ -15,13 +15,21 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
       - заполняет все QComboBox значениями по-умолчанию;
       - кнопки "..." раскрывают/скрывают дополнительные параметры
         (Baudrate, Stop Bit, Parity, Flow Control);
-      - кнопки подключения переключают текст "Підключитись" / "Відключитись";
+      - кнопки подключения переключают текст "Підключитись" / "Скасувати" /
+        "Відключитись" в зависимости от состояния порта;
       - сигналы наружу о запросе подключения/отключения и смене параметров.
     """
 
     # (port_key, port_name, baudrate, stop_bit, parity, flow_control)
     port_connect_requested = Signal(str, str, int, str, str, str)
     port_disconnect_requested = Signal(str)
+    # port_key: любой параметр порта изменён пользователем (для сохранения)
+    params_changed = Signal(str)
+
+    # Состояния порта
+    STATE_DISCONNECTED = "disconnected"
+    STATE_CONNECTING = "connecting"   # порт недоступен, идут повторные попытки
+    STATE_CONNECTED = "connected"
 
     # Ключи портов, которые обслуживает страница
     PORT_BT = "BT"
@@ -31,16 +39,30 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
     BAUDRATES = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
     STOP_BITS = ["1", "1.5", "2"]
     PARITIES = ["None", "Even", "Odd", "Mark", "Space"]
-    FLOW_CONTROLS = ["None", "RTS/CTS", "XON/XOFF", "DSR/DTR"]
+    FLOW_CONTROLS = ["None", "RTS/CTS", "XON/XOFF"]  # DSR/DTR в Qt не поддерживается
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setupUi(self)
 
-        # Храним состояние "подключён ли порт"
-        self._connected = {
-            self.PORT_BT: False,
-            self.PORT_RS: False,
+        # Храним состояние порта
+        self._state = {
+            self.PORT_BT: self.STATE_DISCONNECTED,
+            self.PORT_RS: self.STATE_DISCONNECTED,
+        }
+
+        # Виджеты параметров каждого порта (имя, baudrate, stop, parity, flow)
+        self._param_widgets = {
+            self.PORT_BT: (
+                self.comboBox_bt_port_name, self.comboBox_bt_baudrate,
+                self.comboBox_bt_stop_bit, self.comboBox_bt_parity,
+                self.comboBox_bt_flow_control,
+            ),
+            self.PORT_RS: (
+                self.comboBox_rs_port_name, self.comboBox_rs_baudrate,
+                self.comboBox_rs_stop_bit, self.comboBox_rs_parity,
+                self.comboBox_rs_flow_control,
+            ),
         }
 
         # Изначально доп. параметры скрыты
@@ -111,6 +133,13 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
             lambda: self._toggle_extra(self.PORT_RS)
         )
 
+        # Любое изменение параметров -> наружу (сохранение в settings.json)
+        for port_key, widgets in self._param_widgets.items():
+            for combo in widgets:
+                combo.currentIndexChanged.connect(
+                    lambda _=None, key=port_key: self.params_changed.emit(key)
+                )
+
         # Кнопки подключения/отключения
         self.pushButton_bt_connect.clicked.connect(
             lambda: self._on_connect_clicked(self.PORT_BT)
@@ -133,62 +162,97 @@ class PortSettingsWidget(QWidget, Ui_settingsPage):
             w.setVisible(visible)
 
     def _on_connect_clicked(self, port_key: str):
-        if self._connected[port_key]:
-            self.port_disconnect_requested.emit(port_key)
-        else:
+        if self._state[port_key] == self.STATE_DISCONNECTED:
             self.port_connect_requested.emit(*self._collect_params(port_key))
+        else:
+            # И "Відключитись", и "Скасувати" (остановить повторные попытки)
+            self.port_disconnect_requested.emit(port_key)
 
     def _collect_params(self, port_key: str):
-        if port_key == self.PORT_BT:
-            port_name = self.comboBox_bt_port_name.currentText()
-            baudrate = self.comboBox_bt_baudrate.currentData()
-            stop_bit = self.comboBox_bt_stop_bit.currentText()
-            parity = self.comboBox_bt_parity.currentText()
-            flow = self.comboBox_bt_flow_control.currentText()
-        else:
-            port_name = self.comboBox_rs_port_name.currentText()
-            baudrate = self.comboBox_rs_baudrate.currentData()
-            stop_bit = self.comboBox_rs_stop_bit.currentText()
-            parity = self.comboBox_rs_parity.currentText()
-            flow = self.comboBox_rs_flow_control.currentText()
+        params = self.get_params(port_key)
 
-        return port_key, port_name, baudrate, stop_bit, parity, flow
+        return (
+            port_key,
+            params["port_name"],
+            params["baudrate"],
+            params["stop_bit"],
+            params["parity"],
+            params["flow_control"],
+        )
 
     # ------------------------------------------------------------------ #
     #  Публичный API
     # ------------------------------------------------------------------ #
 
-    def set_connected(self, port_key: str, connected: bool):
+    def get_params(self, port_key: str) -> dict:
+        """Текущие значения полей порта (для сохранения в settings.json)."""
+        name, baud, stop, parity, flow = self._param_widgets[port_key]
+
+        return {
+            "port_name": name.currentText(),
+            "baudrate": int(baud.currentData() or baud.currentText()),
+            "stop_bit": stop.currentText(),
+            "parity": parity.currentText(),
+            "flow_control": flow.currentText(),
+        }
+
+    def apply_params(self, port_key: str, params: dict):
+        """Выставляет поля порта из сохранённых настроек (без сигналов)."""
+        name, baud, stop, parity, flow = self._param_widgets[port_key]
+
+        for combo in (name, baud, stop, parity, flow):
+            combo.blockSignals(True)
+
+        try:
+            port_name = params.get("port_name")
+            if port_name:
+                if name.findText(port_name) == -1:
+                    name.addItem(port_name)
+                name.setCurrentText(port_name)
+
+            index = baud.findData(params.get("baudrate"))
+            if index != -1:
+                baud.setCurrentIndex(index)
+
+            for combo, key in ((stop, "stop_bit"), (parity, "parity"), (flow, "flow_control")):
+                index = combo.findText(str(params.get(key)))
+                if index != -1:
+                    combo.setCurrentIndex(index)
+        finally:
+            for combo in (name, baud, stop, parity, flow):
+                combo.blockSignals(False)
+
+    def set_state(self, port_key: str, state: str):
         """Меняет подпись кнопки и (де)активирует поля ввода."""
-        self._connected[port_key] = connected
+        self._state[port_key] = state
 
         if port_key == self.PORT_BT:
             button = self.pushButton_bt_connect
-            inputs = [
-                self.comboBox_bt_port_name,
-                self.comboBox_bt_baudrate,
-                self.comboBox_bt_stop_bit,
-                self.comboBox_bt_parity,
-                self.comboBox_bt_flow_control,
-                self.pushButton_bt_settings,
-            ]
+            settings_button = self.pushButton_bt_settings
         else:
             button = self.pushButton_rs_connect
-            inputs = [
-                self.comboBox_rs_port_name,
-                self.comboBox_rs_baudrate,
-                self.comboBox_rs_stop_bit,
-                self.comboBox_rs_parity,
-                self.comboBox_rs_flow_control,
-                self.pushButton_rs_settings,
-            ]
+            settings_button = self.pushButton_rs_settings
 
-        button.setText("Відключитись" if connected else "Підключитись")
-        for w in inputs:
-            w.setEnabled(not connected)
+        button.setText({
+            self.STATE_DISCONNECTED: "Підключитись",
+            self.STATE_CONNECTING: "Скасувати",
+            self.STATE_CONNECTED: "Відключитись",
+        }[state])
+
+        editable = state == self.STATE_DISCONNECTED
+
+        for w in (*self._param_widgets[port_key], settings_button):
+            w.setEnabled(editable)
+
+    def set_connected(self, port_key: str, connected: bool):
+        """Совместимость со старым API."""
+        self.set_state(
+            port_key,
+            self.STATE_CONNECTED if connected else self.STATE_DISCONNECTED,
+        )
 
     def is_connected(self, port_key: str) -> bool:
-        return self._connected.get(port_key, False)
+        return self._state.get(port_key) == self.STATE_CONNECTED
 
     def show_error(self, title: str, message: str):
         QMessageBox.critical(self, title, message)

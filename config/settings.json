@@ -1,0 +1,20 @@
+{
+  "ports": {
+    "BT": {
+      "port_name": "COM17",
+      "baudrate": 115200,
+      "stop_bit": "1",
+      "parity": "None",
+      "flow_control": "None",
+      "auto_connect": false
+    },
+    "RS": {
+      "port_name": "COM20",
+      "baudrate": 19200,
+      "stop_bit": "1",
+      "parity": "None",
+      "flow_control": "None",
+      "auto_connect": false
+    }
+  }
+}

@@ -1,4 +1,5 @@
 from enum import Enum
+import subprocess
 
 from app.ui.widgets.board_widget import BoardWidget
 from app.ui.widgets.tree_widget import TreeModel, TreeWidget
@@ -11,6 +12,7 @@ from backend.kicad_api import KiCadApi
 from backend.session import DiagnosticSession
 from backend.runner import ScenarioRunner, DebugState
 from backend.serial_manager import SerialManager
+from backend.settings import AppSettings
 from backend.serial_step_handler import SerialStepHandler
 
 from backend.models.list_model import TaskListModel, TaskStatus, STATUS_COLORS, STATUS_LABELS, STATUS_ROLE
@@ -37,11 +39,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.resize(1280, 460)
         self.setStyleSheet("QMainWindow { background:#0e1120; }")
 
-        self.kicad = KiCadApi(self)
+        # Запускаем KiCad и сохраняем процесс
+        self.kicad_process = subprocess.Popen([
+            r"E:\Prog\KiCAD\bin\pcbnew.exe",
+            r"files\1.kicad_pcb",
+        ])
+
+        self.kicad = KiCadApi(self, kicad_process=self.kicad_process)  # Popen от запуска KiCad
         self.kicad.connection_status_changed.connect(self.show_status_bar_msg)
         self.kicad.selected_nets_changed.connect(self.update_selected_nets)
         self.kicad.connection_error.connect(self.show_connection_error)
         self.kicad.connect()
+
+
         
         # Создаем страницу из второго UI
         self.main_page_widget = QWidget()
@@ -74,8 +84,20 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.serial.port_disconnected.connect(self.on_port_disconnected)
         self.serial.port_error.connect(self.on_port_error)
 
-        # self.serial.add_port("RS","COM20", baud_rate=19200)
-        # self.serial.add_port("BT","COM21", baud_rate=19200)
+        # Порт ждёт возвращения (занят / отключён) — идут автоповторы
+        self.serial.port_reconnecting.connect(self.on_port_reconnecting)
+
+        # Параметры портов хранятся в config/settings.json
+        self.app_settings = AppSettings("config\\settings.json")
+        self._user_connect_pending = set()  # порты, подключаемые кнопкой
+
+        self.settings_page_widget.params_changed.connect(self.on_port_params_changed)
+
+        for key in (PortSettingsWidget.PORT_BT, PortSettingsWidget.PORT_RS):
+            self.settings_page_widget.apply_params(key, self.app_settings.get_port(key))
+
+        # Автоподключение портов, которые были подключены в прошлый раз
+        QTimer.singleShot(0, self._auto_connect_ports)
 
         # Сохранения и загрузка сессии диагностики
         self.session = DiagnosticSession(self.model)
@@ -380,15 +402,51 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #  Слоты страницы настроек портов
     # ------------------------------------------------------------------ #
 
-    def on_port_connect_requested(self, port_key, port_name, baudrate,
-                                stop_bit, parity, flow_control):
-        """Запрос на подключение порта со страницы настроек."""
-        try:
-            # Если порт уже добавлен — обновим параметры, иначе добавим
-            if port_key in self.serial.ports:
-                self.serial.remove_port(port_key)
+    def _auto_connect_ports(self):
+        """Подключает порты, которые были подключены при прошлом выходе."""
+        for key in (PortSettingsWidget.PORT_BT, PortSettingsWidget.PORT_RS):
+            params = self.app_settings.get_port(key)
 
-            self.serial.add_port(
+            if not params["auto_connect"]:
+                continue
+
+            self.on_port_connect_requested(
+                key,
+                params["port_name"],
+                params["baudrate"],
+                params["stop_bit"],
+                params["parity"],
+                params["flow_control"],
+                user_initiated=False,
+            )
+
+    def on_port_params_changed(self, port_key: str):
+        """Пользователь изменил параметры порта — сохраняем в settings.json."""
+        self.app_settings.update_port(
+            port_key, **self.settings_page_widget.get_params(port_key)
+        )
+
+    def on_port_connect_requested(self, port_key, port_name, baudrate,
+                                  stop_bit, parity, flow_control,
+                                  user_initiated=True):
+        """Запрос на подключение порта (кнопка или автоподключение)."""
+        self.app_settings.update_port(
+            port_key,
+            port_name=port_name,
+            baudrate=baudrate,
+            stop_bit=stop_bit,
+            parity=parity,
+            flow_control=flow_control,
+            auto_connect=True,
+        )
+
+        if user_initiated:
+            self._user_connect_pending.add(port_key)
+
+        try:
+            # Строки из UI (parity "Even", stop_bit "1.5" ...) SerialManager
+            # сам преобразует в enum-ы QSerialPort.
+            self.serial.configure_port(
                 port_key,
                 port_name,
                 baud_rate=baudrate,
@@ -396,15 +454,23 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 parity=parity,
                 flow_control=flow_control,
             )
+            # Если порт занят/недоступен — SerialManager продолжит попытки сам
             self.serial.connect_port(port_key)
         except Exception as e:
+            self.settings_page_widget.set_state(
+                port_key, PortSettingsWidget.STATE_DISCONNECTED
+            )
             self.settings_page_widget.show_error(
                 "Помилка підключення",
                 f"Не вдалося відкрити {port_key} ({port_name}):\n{e}"
             )
+        finally:
+            self._user_connect_pending.discard(port_key)
 
     def on_port_disconnect_requested(self, port_key: str):
-        """Запрос на отключение порта."""
+        """Запрос на отключение порта (или отмену повторных попыток)."""
+        self.app_settings.update_port(port_key, auto_connect=False)
+
         try:
             self.serial.disconnect_port(port_key)
         except Exception as e:
@@ -415,16 +481,38 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def on_port_connected(self, port_key: str):
         """SerialManager подтвердил подключение."""
-        self.settings_page_widget.set_connected(port_key, True)
+        self.settings_page_widget.set_state(port_key, PortSettingsWidget.STATE_CONNECTED)
         self.append_log(f"Порт {port_key} підключено.")
 
     def on_port_disconnected(self, port_key: str):
-        """SerialManager подтвердил отключение."""
-        self.settings_page_widget.set_connected(port_key, False)
+        """Порт закрыт (пользователем или потерян)."""
+        self.settings_page_widget.set_state(port_key, PortSettingsWidget.STATE_DISCONNECTED)
         self.append_log(f"Порт {port_key} відключено.")
 
+    def on_port_reconnecting(self, port_key: str):
+        """Порт недоступен — SerialManager повторяет попытки автоматично."""
+        self.settings_page_widget.set_state(port_key, PortSettingsWidget.STATE_CONNECTING)
+        self.append_log(f"Порт {port_key} недоступний, очікуємо на відновлення зв'язку…")
+        self.show_status_bar_msg(f"Порт {port_key}: очікування відновлення зв'язку…")
+
     def on_port_error(self, port_key: str, message: str):
-        """SerialManager сообщил об ошибке."""
-        self.settings_page_widget.set_connected(port_key, False)
-        self.settings_page_widget.show_error("Помилка порту", f"{port_key}: {message}")
+        """
+        SerialManager сообщает об ошибке (один раз за серию неудач,
+        повторные попытки молчат).
+        """
         self.append_log(f"Помилка порту {port_key}: {message}")
+
+        if port_key in self._user_connect_pending:
+            # Диалог только когда пользователь сам нажал "Підключитись".
+            # Откладываем, чтобы не открывать модальное окно внутри сигнала.
+            text = (
+                f"{port_key}: {message}\n\n"
+                "Порт зайнятий або недоступний. Програма повторюватиме спробу "
+                "автоматично. Натисніть «Скасувати», щоб зупинити."
+            )
+            QTimer.singleShot(
+                0,
+                lambda: self.settings_page_widget.show_error("Помилка порту", text),
+            )
+        else:
+            self.show_status_bar_msg(f"Помилка порту {port_key}: {message}")
