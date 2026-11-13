@@ -1,24 +1,24 @@
 {
   "ports": {
     "BT": {
+      "port_name": "COM25",
+      "baudrate": 115200,
+      "stop_bit": "1",
+      "parity": "None",
+      "flow_control": "None",
+      "auto_connect": true
+    },
+    "RS": {
       "port_name": "COM17",
       "baudrate": 115200,
       "stop_bit": "1",
       "parity": "None",
       "flow_control": "None",
-      "auto_connect": false
-    },
-    "RS": {
-      "port_name": "COM20",
-      "baudrate": 19200,
-      "stop_bit": "1",
-      "parity": "None",
-      "flow_control": "None",
-      "auto_connect": false
+      "auto_connect": true
     }
   },
   "kicad": {
-    "executable_path": "C:\\Program Files\\KiCad\\10.0\\bin\\pcbnew.exe",
-    "project_path": "D:\\Projects\\VS\\PCBDebugger\\files\\1.kicad_pcb"
+    "executable_path": "D:\\Prog\\bin\\pcbnew.exe",
+    "project_path": "C:\\Users\\Tymoshyn\\Downloads\\1.kicad_pcb"
   }
 }

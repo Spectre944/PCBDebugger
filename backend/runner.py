@@ -433,5 +433,5 @@ class ScenarioRunner(QObject):
         self._status(f"Крок '{self._step_label(self.current_id)}' — [ <span style='color:{color}'>{result.upper()}</span> ]")
 
         # Задерка между шагами для более понятного UI
-        QTimer.singleShot(200, lambda: self._advance_from(index, result))
+        QTimer.singleShot(1000, lambda: self._advance_from(index, result))
         

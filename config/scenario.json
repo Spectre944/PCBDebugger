@@ -121,27 +121,11 @@
       },
       "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST1*", "expect" : "$RS RXD READY1*", "source": "RS" },
       "options": {
-        "pass": { "next": "2186db29" },
+        "pass": { "next": "8e74645b" },
         "fail": {
           "next": "a893ba8d",
           "pause": true,
           "log": "Немає відповіді READY1 — проблема з лінією OSC_IN"
-        }
-      },
-      "nets": ["OSC_IN"]
-    },
-	{
-      "general": {
-        "id": "2186db29",
-        "title": "5.2 Перевірка інтерфейсу Bluetooth від роботи генератора"
-      },
-      "testing": { "mode": "auto", "kind": "send_and_wait", "send" : "$RS RXD TEST2*", "expect" : "$RS RXD READY2", "source": "BT"  },
-      "options": {
-        "pass": { "next": "8e74645b" },
-        "fail": {
-          "next": "2186db29",
-          "pause": true,
-          "log": "Немає відповіді READY2 — проблема з лінією OSC_IN"
         }
       },
       "nets": ["OSC_IN"]
@@ -191,7 +175,6 @@
           "90": 1,
           "91": 1,
           "92": 1,
-          "93": 1,
           "133": 1,
           "135": 1,
           "136": 1
@@ -252,7 +235,6 @@
           "90": 0,
           "91": 0,
           "92": 0,
-          "93": 0,
           "133": 0,
           "135": 0,
           "136": 0
@@ -293,7 +275,6 @@
 		  90,
 		  91,
 		  92,
-		  93,
 		  133,
 		  135,
 		  136
@@ -334,7 +315,6 @@
           90,
           91,
           92,
-          93,
           133,
           135,
           136

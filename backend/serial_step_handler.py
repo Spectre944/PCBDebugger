@@ -5,11 +5,14 @@ import re
 from dataclasses import dataclass, field
 from typing import Callable
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 
 
 DEFAULT_TIMEOUT_MS = 2000
 DEFAULT_STEP_DELAY_MS = 500
+# Пауза між відправкою $PIN і запитом стану ($ALL TEST OUT) у pin_sweep:
+# процесор має встигнути обробити команду і змінити стан виводів.
+DEFAULT_PIN_SETTLE_DELAY_MS = 100
 
 _PIN_VALUE_RE = re.compile(r"P(\d+)=([01])")
 
@@ -71,6 +74,7 @@ class PinSweepState:
     read_port: str
     value: int
     timeout_ms: int
+    settle_delay_ms: int = DEFAULT_PIN_SETTLE_DELAY_MS
 
     remaining: list[int] = field(init=False)
     bad_pins: set[int] = field(default_factory=set)
@@ -375,6 +379,13 @@ class SerialStepHandler(QObject):
         # Порт, используемый для установки значения PIN
         # во время pin_sweep.
         self._current_set_port: str | None = None
+
+        # Неблокуюча затримка між командою $PIN і запитом стану.
+        # Таймер живе в event loop, GUI не замерзає.
+        self._pin_settle_timer = QTimer(self)
+        self._pin_settle_timer.setSingleShot(True)
+        self._pin_settle_timer.timeout.connect(self._send_pin_state_request)
+        self._pending_pin_read: tuple[int, dict[int, int], PinSweepState] | None = None
 
         self._register_handlers()
         self._connect_signals()
@@ -1145,6 +1156,16 @@ class SerialStepHandler(QObject):
             self.runner.report_result("fail")
             return
 
+        settle_delay_ms = max(
+            0,
+            int(
+                testing.get(
+                    "settle_delay_ms",
+                    DEFAULT_PIN_SETTLE_DELAY_MS,
+                )
+            ),
+        )
+
         self._current_set_port = set_port
 
         state = PinSweepState(
@@ -1153,6 +1174,7 @@ class SerialStepHandler(QObject):
             read_port=read_port,
             value=value,
             timeout_ms=timeout_ms,
+            settle_delay_ms=settle_delay_ms,
         )
 
         self.runner.log_detail(
@@ -1200,6 +1222,22 @@ class SerialStepHandler(QObject):
             )
             for current_pin in state.pins
         }
+
+        # Команда відправлена. Даємо процесору час відпрацювати і лише
+        # потім запитуємо стан. QTimer не блокує основний потік.
+        self._pending_pin_read = (pin, expected, state)
+        self._pin_settle_timer.start(state.settle_delay_ms)
+
+    def _send_pin_state_request(self) -> None:
+        """Викликається таймером: запитує стан після паузи."""
+
+        pending = self._pending_pin_read
+        self._pending_pin_read = None
+
+        if pending is None:
+            return
+
+        pin, expected, state = pending
 
         match_fn = build_frame_match_fn("$PORT")
 
